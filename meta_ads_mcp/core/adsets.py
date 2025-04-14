@@ -78,7 +78,8 @@ async def get_adset_details(access_token: str = None, adset_id: str = None) -> s
 @mcp_server.tool()
 @meta_api_tool
 async def update_adset(adset_id: str, frequency_control_specs: List[Dict[str, Any]] = None, bid_strategy: str = None, 
-                        bid_amount: int = None, status: str = None, targeting: Dict[str, Any] = None, access_token: str = None) -> str:
+                        bid_amount: int = None, status: str = None, targeting: Dict[str, Any] = None, 
+                        optimization_goal: str = None, access_token: str = None) -> str:
     """
     Update an ad set with new settings including frequency caps.
     
@@ -91,6 +92,7 @@ async def update_adset(adset_id: str, frequency_control_specs: List[Dict[str, An
         status: Update ad set status (ACTIVE, PAUSED, etc.)
         targeting: Targeting specifications including targeting_automation
                   (e.g. {"targeting_automation":{"advantage_audience":1}})
+        optimization_goal: Conversion optimization goal (e.g., 'LINK_CLICKS', 'CONVERSIONS', 'APP_INSTALLS', etc.)
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     if not adset_id:
@@ -109,6 +111,9 @@ async def update_adset(adset_id: str, frequency_control_specs: List[Dict[str, An
         
     if status is not None:
         changes['status'] = status
+        
+    if optimization_goal is not None:
+        changes['optimization_goal'] = optimization_goal
         
     if targeting is not None:
         # Get current ad set details to preserve existing targeting settings
