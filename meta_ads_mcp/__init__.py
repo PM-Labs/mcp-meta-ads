@@ -7,7 +7,7 @@ with the Claude LLM.
 
 from meta_ads_mcp.core.server import main
 
-__version__ = "0.2.5"
+__version__ = "0.2.6"
 
 __all__ = [
     'get_ad_accounts',
@@ -22,6 +22,7 @@ __all__ = [
     'get_ad_details',
     'get_ad_creatives',
     'get_ad_image',
+    'update_ad',
     'get_insights',
     'debug_image_download',
     'get_login_link',
@@ -43,6 +44,7 @@ from .core import (
     get_ad_details,
     get_ad_creatives,
     get_ad_image,
+    update_ad,
     get_insights,
     debug_image_download,
     get_login_link,
