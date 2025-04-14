@@ -444,7 +444,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     return None
             
             elif self.path.startswith("/confirm-update"):
-                # Parse query parameters
+                # Generate confirmation URL with properly encoded parameters
                 query = parse_qs(urlparse(self.path).query)
                 adset_id = query.get("adset_id", [""])[0]
                 token = query.get("token", [""])[0]
@@ -457,13 +457,14 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 
                 # Return confirmation page
                 self.send_response(200)
-                self.send_header("Content-type", "text/html")
+                self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
                 
                 html = """
                 <html>
                 <head>
                     <title>Confirm Ad Set Update</title>
+                    <meta charset="utf-8">
                     <style>
                         body { font-family: Arial, sans-serif; margin: 20px; max-width: 1000px; margin: 0 auto; }
                         .warning { color: #d73a49; margin: 20px 0; padding: 15px; border-left: 4px solid #d73a49; background-color: #fff8f8; }
@@ -486,15 +487,14 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     <p>You are about to update Ad Set: <strong>""" + adset_id + """</strong></p>
                     
                     <div class="warning">
-                        <strong>⚠️ Warning:</strong> These changes will be applied immediately upon approval.
-                        """ + ("<br><strong>🔴 Important:</strong> This update includes status changes that may affect billing." if "status" in changes_dict else "") + """
+                        <p><strong>Warning:</strong> This action will directly update your ad set in Meta Ads. Please review the changes carefully before approving.</p>
                     </div>
                     
-                    <h2>Proposed Changes:</h2>
                     <div class="changes">
+                        <h3>Changes to apply:</h3>
                         <table class="diff-table">
                             <tr class="header">
-                                <td>Setting</td>
+                                <td>Field</td>
                                 <td>New Value</td>
                                 <td>Description</td>
                             </tr>
@@ -508,6 +508,15 @@ class CallbackHandler(BaseHTTPRequestHandler):
                         if all(key in spec for key in ["event", "interval_days", "max_frequency"]):
                             description = f"Cap to {spec['max_frequency']} {spec['event'].lower()} per {spec['interval_days']} days"
                 
+                    # Special handling for targeting_automation
+                    elif k == "targeting" and isinstance(v, dict) and "targeting_automation" in v:
+                        targeting_auto = v.get("targeting_automation", {})
+                        if "advantage_audience" in targeting_auto:
+                            audience_value = targeting_auto["advantage_audience"]
+                            description = f"Set Advantage+ audience to {'ON' if audience_value == 1 else 'OFF'}"
+                            if audience_value == 1:
+                                description += " (may be restricted for Special Ad Categories)"
+                
                     # Format the value for display
                     display_value = json.dumps(v, indent=2) if isinstance(v, (dict, list)) else str(v)
                     
@@ -518,6 +527,9 @@ class CallbackHandler(BaseHTTPRequestHandler):
                                 <td>{description}</td>
                             </tr>
                             """
+                
+                # Create a properly escaped JSON string for JavaScript
+                escaped_changes = json.dumps(changes).replace("'", "\\'").replace('"', '\\"')
                 
                 html += """
                         </table>
@@ -531,6 +543,18 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     <div id="status" class="status"></div>
 
                     <script>
+                        // Enable debug logging
+                        const DEBUG = true;
+                        function debugLog(message, data) {
+                            if (DEBUG) {
+                                if (data) {
+                                    console.log(`[DEBUG-CONFIRM] ${message}:`, data);
+                                } else {
+                                    console.log(`[DEBUG-CONFIRM] ${message}`);
+                                }
+                            }
+                        }
+                        
                         function showStatus(message, isError = false) {
                             const statusElement = document.getElementById('status');
                             statusElement.textContent = message;
@@ -546,21 +570,95 @@ class CallbackHandler(BaseHTTPRequestHandler):
                         
                         function approveChanges() {
                             showStatus("Processing update...");
+                            debugLog("Approving changes");
                             
                             const buttons = document.querySelectorAll('button');
                             buttons.forEach(button => button.disabled = true);
                             
-                            fetch('/update-confirm?' + new URLSearchParams({
+                            const params = new URLSearchParams({
                                 adset_id: '""" + adset_id + """',
                                 token: '""" + token + """',
-                                changes: '""" + changes + """',
+                                changes: '""" + escaped_changes + """',
                                 action: 'approve'
-                            }))
-                            .then(response => response.json())
+                            });
+                            
+                            debugLog("Sending update request with params", {
+                                adset_id: '""" + adset_id + """',
+                                changes: JSON.parse('""" + escaped_changes + """')
+                            });
+                            
+                            fetch('/update-confirm?' + params)
+                            .then(response => {
+                                debugLog("Received response", { status: response.status });
+                                return response.text().then(text => {
+                                    debugLog("Raw response text", text);
+                                    try {
+                                        return JSON.parse(text);
+                                    } catch (e) {
+                                        debugLog("Error parsing JSON response", e);
+                                        return { status: "error", error: "Invalid response format from server" };
+                                    }
+                                });
+                            })
                             .then(data => {
-                                if (data.error) {
-                                    showStatus('Error applying changes: ' + data.error, true);
-                                    buttons.forEach(button => button.disabled = false);
+                                debugLog("Parsed response data", data);
+                                
+                                if (data.status === "error") {
+                                    // Build a properly encoded and detailed error message
+                                    let errorMessage = data.error || "Unknown error";
+                                    
+                                    // Include any detailed errors if available
+                                    if (data.errorDetails && data.errorDetails.length > 0) {
+                                        errorMessage = data.errorDetails.join("; ");
+                                    }
+                                    
+                                    // If we have an API error object, use its information
+                                    if (data.apiError) {
+                                        if (data.apiError.error_user_msg) {
+                                            errorMessage = data.apiError.error_user_msg;
+                                        } else if (data.apiError.message) {
+                                            errorMessage = data.apiError.message;
+                                        }
+                                        
+                                        if (data.apiError.error_data) {
+                                            try {
+                                                const errorData = JSON.parse(data.apiError.error_data);
+                                                if (errorData.blame_field_specs && errorData.blame_field_specs.length > 0) {
+                                                    if (Array.isArray(errorData.blame_field_specs[0])) {
+                                                        const specs = errorData.blame_field_specs[0].filter(Boolean);
+                                                        if (specs.length > 0) {
+                                                            errorMessage = specs.join("; ");
+                                                        }
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                debugLog("Error parsing error_data", e);
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Create a detailed error object for the verification page
+                                    const fullErrorData = {
+                                        message: errorMessage,
+                                        details: data.errorDetails || [],
+                                        apiError: data.apiError || {},
+                                        fullResponse: data.fullResponse || {}
+                                    };
+                                    
+                                    debugLog("Redirecting with error message", errorMessage);
+                                    debugLog("Full error data", fullErrorData);
+                                    
+                                    // Encode the stringified error object
+                                    const encodedErrorData = encodeURIComponent(JSON.stringify(fullErrorData));
+                                    
+                                    // Redirect to verification page with detailed error information
+                                    const errorParams = new URLSearchParams({
+                                        adset_id: '""" + adset_id + """',
+                                        token: '""" + token + """',
+                                        error: errorMessage,
+                                        errorData: encodedErrorData
+                                    });
+                                    window.location.href = '/verify-update?' + errorParams;
                                 } else {
                                     showStatus('Changes approved and will be applied shortly!');
                                     setTimeout(() => {
@@ -572,6 +670,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
                                 }
                             })
                             .catch(error => {
+                                debugLog("Fetch error", error);
                                 showStatus('Error applying changes: ' + error, true);
                                 buttons.forEach(button => button.disabled = false);
                             });
@@ -593,7 +692,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 </body>
                 </html>
                 """
-                self.wfile.write(html.encode())
+                self.wfile.write(html.encode('utf-8'))
                 return
             
             elif self.path.startswith("/verify-update"):
@@ -602,15 +701,28 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 adset_id = query.get("adset_id", [""])[0]
                 token = query.get("token", [""])[0]
                 
+                # Check if there was an error in the update process
+                error_message = query.get("error", [""])[0]
+                error_data_encoded = query.get("errorData", [""])[0]
+                
+                # Try to decode detailed error data if available
+                error_data = {}
+                if error_data_encoded:
+                    try:
+                        error_data = json.loads(urllib.parse.unquote(error_data_encoded))
+                    except:
+                        logger.error("Failed to parse errorData parameter")
+                
                 # Respond with a verification page
                 self.send_response(200)
-                self.send_header("Content-type", "text/html")
+                self.send_header("Content-type", "text/html; charset=utf-8")
                 self.end_headers()
                 
                 html = """
                 <html>
                 <head>
                     <title>Verifying Ad Set Update</title>
+                    <meta charset="utf-8">
                     <style>
                         body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; margin: 0 auto; }
                         .status { padding: 15px; margin-top: 20px; border-radius: 6px; }
@@ -622,6 +734,14 @@ class CallbackHandler(BaseHTTPRequestHandler):
                         pre { white-space: pre-wrap; word-break: break-all; }
                         .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top-color: #0366d6; animation: spin 1s ease-in-out infinite; margin-right: 10px; }
                         @keyframes spin { to { transform: rotate(360deg); } }
+                        .fix-suggestion { background-color: #e6f6ff; border: 1px solid #79b8ff; padding: 15px; border-radius: 6px; margin-top: 10px; }
+                        .code-block { background-color: #f6f8fa; padding: 8px; border-radius: 4px; font-family: monospace; }
+                        .error-list { margin-top: 10px; }
+                        .error-list li { margin-bottom: 8px; }
+                        .debug-section { background-color: #f0f0f0; margin-top: 30px; padding: 15px; border: 1px dashed #666; }
+                        .debug-section h3 { color: #333; }
+                        .raw-response { font-family: monospace; font-size: 12px; max-height: 300px; overflow: auto; }
+                        .error-details { margin-top: 15px; background-color: #fff5f5; padding: 15px; border-left: 3px solid #d73a49; }
                     </style>
                 </head>
                 <body>
@@ -641,17 +761,244 @@ class CallbackHandler(BaseHTTPRequestHandler):
                         <h3>Updated Ad Set Details:</h3>
                         <pre id="adset-details">Loading...</pre>
                     </div>
+                    
+                    <div id="debug-section" class="debug-section" style="display: none;">
+                        <h3>Debug Information</h3>
+                        <div>
+                            <h4>URL Parameters:</h4>
+                            <pre id="url-params">Loading...</pre>
+                        </div>
+                        <div>
+                            <h4>Error Data:</h4>
+                            <pre id="error-data-debug">""" + json.dumps(error_data, indent=2) + """</pre>
+                        </div>
+                        <div>
+                            <h4>Raw API Response:</h4>
+                            <pre id="raw-response" class="raw-response">Loading...</pre>
+                        </div>
+                    </div>
 
                     <script>
+                        // Enable debug mode
+                        const DEBUG = true;
+                        
+                        // Debug logging helper
+                        function debugLog(message, data) {
+                            if (DEBUG) {
+                                if (data) {
+                                    console.log(`[DEBUG] ${message}:`, data);
+                                } else {
+                                    console.log(`[DEBUG] ${message}`);
+                                }
+                            }
+                        }
+                        
+                        // Show debug section
+                        if (DEBUG) {
+                            document.getElementById('debug-section').style.display = 'block';
+                        }
+                        
+                        // Parse and display URL parameters
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const urlParamsObj = {};
+                        for (const [key, value] of urlParams.entries()) {
+                            urlParamsObj[key] = value;
+                        }
+                        
+                        debugLog('URL parameters', urlParamsObj);
+                        document.getElementById('url-params').textContent = JSON.stringify(urlParamsObj, null, 2);
+                        
+                        // Try to parse error data if available
+                        let errorData = null;
+                        const errorDataParam = urlParams.get('errorData');
+                        if (errorDataParam) {
+                            try {
+                                errorData = JSON.parse(decodeURIComponent(errorDataParam));
+                                debugLog('Parsed error data', errorData);
+                            } catch (e) {
+                                debugLog('Failed to parse errorData', e);
+                            }
+                        }
+                        
+                        // Check if there was an error passed in the URL
+                        const errorParam = urlParams.get('error');
+                        debugLog('Error parameter found', errorParam);
+                        
+                        if (errorParam) {
+                            // If there's an error, show it immediately
+                            const errorMessage = decodeURIComponent(errorParam);
+                            debugLog('Decoded error message', errorMessage);
+                            
+                            const statusElement = document.getElementById('status');
+                            statusElement.classList.remove('loading');
+                            statusElement.classList.add('error');
+                            
+                            // Check if this is a Special Ad Category error
+                            const isSpecialAdCategoryError = 
+                                errorMessage.includes("Special Ad Category") || 
+                                errorMessage.includes("Advantage+") || 
+                                errorMessage.includes("advantage_audience");
+                            
+                            debugLog('Is Special Ad Category error', isSpecialAdCategoryError);
+                            
+                            if (isSpecialAdCategoryError) {
+                                // Format special ad category errors with better explanation
+                                debugLog('Displaying Special Ad Category error');
+                                statusElement.innerHTML = `
+                                    <h3>❌ Special Ad Category Restriction</h3>
+                                    <p>${errorMessage}</p>
+                                    <div class="note" style="margin-top:10px">
+                                        <strong>What does this mean?</strong><br>
+                                        Meta restricts certain targeting features like Advantage+ audience for ads in Special Ad Categories 
+                                        (housing, employment, credit, social issues, etc.). You need to use standard targeting options instead.
+                                    </div>
+                                    <div class="fix-suggestion">
+                                        <strong>How to fix:</strong><br>
+                                        To update this ad set, try setting <span class="code-block">targeting.targeting_automation.advantage_audience</span> to <span class="code-block">0</span> instead of <span class="code-block">1</span>.
+                                    </div>
+                                `;
+                            } else {
+                                // Standard error display with more details
+                                debugLog('Displaying standard error');
+                                
+                                // Start with basic error display
+                                let errorHtml = `
+                                    <h3>❌ Error updating ad set</h3>
+                                    <p>${errorMessage}</p>
+                                `;
+                                
+                                // Add detailed error information if available
+                                if (errorData) {
+                                    errorHtml += `<div class="error-details">`;
+                                    
+                                    if (errorData.details && errorData.details.length > 0) {
+                                        errorHtml += `
+                                            <strong>Error Details:</strong>
+                                            <ul class="error-list">
+                                                ${errorData.details.map(detail => `<li>${detail}</li>`).join('')}
+                                            </ul>
+                                        `;
+                                    }
+                                    
+                                    if (errorData.apiError) {
+                                        const apiError = errorData.apiError;
+                                        if (apiError.error_user_title) {
+                                            errorHtml += `<div><strong>Error Type:</strong> ${apiError.error_user_title}</div>`;
+                                        }
+                                        
+                                        if (apiError.code) {
+                                            errorHtml += `<div><strong>Error Code:</strong> ${apiError.code}</div>`;
+                                        }
+                                        
+                                        if (apiError.error_subcode) {
+                                            errorHtml += `<div><strong>Error Subcode:</strong> ${apiError.error_subcode}</div>`;
+                                        }
+                                    }
+                                    
+                                    errorHtml += `</div>`;
+                                }
+                                
+                                statusElement.innerHTML = errorHtml;
+                            }
+                            
+                            // Just display current state, don't try to verify the update since it failed
+                            document.getElementById('details').innerHTML = `
+                                <h3>Current Ad Set Details (Changes Not Applied):</h3>
+                                <p>Fetching current state...</p>
+                                <pre id="adset-details">Loading...</pre>
+                            `;
+                            document.getElementById('details').style.display = 'block';
+                            
+                            // Fetch the current ad set details to show what wasn't changed
+                            fetchAdSetDetails();
+                        } else {
+                            // Otherwise proceed with normal verification
+                            debugLog('No error parameter found, proceeding with verification');
+                            setTimeout(verifyUpdate, 3000);
+                        }
+                        
+                        // Function to just fetch the ad set details
+                        async function fetchAdSetDetails() {
+                            try {
+                                debugLog('Fetching ad set details');
+                                const apiUrl = '/api/adset?' + new URLSearchParams({
+                                    adset_id: '""" + adset_id + """',
+                                    token: '""" + token + """'
+                                });
+                                
+                                debugLog('Fetching from URL', apiUrl);
+                                const response = await fetch(apiUrl);
+                                
+                                // Log raw response
+                                const responseText = await response.text();
+                                debugLog('Raw API response text', responseText);
+                                document.getElementById('raw-response').textContent = responseText;
+                                
+                                // Parse JSON
+                                let data;
+                                try {
+                                    data = JSON.parse(responseText);
+                                    debugLog('Parsed API response', data);
+                                } catch (parseError) {
+                                    debugLog('Error parsing JSON response', parseError);
+                                    throw new Error(`Failed to parse API response: ${parseError.message}`);
+                                }
+                                
+                                const detailsElement = document.getElementById('details');
+                                const adsetDetailsElement = document.getElementById('adset-details');
+                                
+                                // Check if there's an error in the response
+                                if (data.error) {
+                                    debugLog('Error in API response', data.error);
+                                    adsetDetailsElement.textContent = JSON.stringify({
+                                        error: "Error fetching ad set details", 
+                                        details: typeof data.error === 'object' ? 
+                                            data.error.message || JSON.stringify(data.error) : 
+                                            data.error
+                                    }, null, 2);
+                                } else {
+                                    // No errors, display the ad set details
+                                    debugLog('Successfully fetched ad set details');
+                                    detailsElement.style.display = 'block';
+                                    adsetDetailsElement.textContent = JSON.stringify(data, null, 2);
+                                }
+                            } catch (error) {
+                                debugLog('Error in fetchAdSetDetails', error);
+                                console.error('Error fetching ad set details:', error);
+                                const adsetDetailsElement = document.getElementById('adset-details');
+                                if (adsetDetailsElement) {
+                                    adsetDetailsElement.textContent = "Error fetching ad set details: " + error.message;
+                                }
+                            }
+                        }
+                        
                         // Function to fetch the ad set details and check if frequency_control_specs was updated
                         async function verifyUpdate() {
                             try {
-                                const response = await fetch('/api/adset?' + new URLSearchParams({
+                                debugLog('Starting verification of update');
+                                const apiUrl = '/api/adset?' + new URLSearchParams({
                                     adset_id: '""" + adset_id + """',
                                     token: '""" + token + """'
-                                }));
+                                });
                                 
-                                const data = await response.json();
+                                debugLog('Verifying update from URL', apiUrl);
+                                const response = await fetch(apiUrl);
+                                
+                                // Log raw response
+                                const responseText = await response.text();
+                                debugLog('Raw verification response text', responseText);
+                                document.getElementById('raw-response').textContent = responseText;
+                                
+                                // Parse JSON
+                                let data;
+                                try {
+                                    data = JSON.parse(responseText);
+                                    debugLog('Parsed verification response', data);
+                                } catch (parseError) {
+                                    debugLog('Error parsing JSON verification response', parseError);
+                                    throw new Error(`Failed to parse verification response: ${parseError.message}`);
+                                }
+                                
                                 const statusElement = document.getElementById('status');
                                 const detailsElement = document.getElementById('details');
                                 const adsetDetailsElement = document.getElementById('adset-details');
@@ -659,25 +1006,83 @@ class CallbackHandler(BaseHTTPRequestHandler):
                                 detailsElement.style.display = 'block';
                                 adsetDetailsElement.textContent = JSON.stringify(data, null, 2);
                                 
-                                // Update success message to reflect API visibility limitations
-                                statusElement.classList.remove('loading');
-                                statusElement.classList.add('success');
-                                statusElement.innerHTML = '✅ Update request was processed successfully. Please verify the changes in Meta Ads Manager UI or monitor ad performance metrics.';
+                                // Check if there's an error in the response
+                                if (data.error) {
+                                    debugLog('Error in verification response', data.error);
+                                    statusElement.classList.remove('loading');
+                                    statusElement.classList.add('error');
+                                    
+                                    // Extract error message from various possible formats
+                                    let errorMessage = "Unknown error occurred";
+                                    
+                                    if (typeof data.error === 'string') {
+                                        errorMessage = data.error;
+                                        debugLog('Error is string', errorMessage);
+                                    } else if (data.error.message) {
+                                        errorMessage = data.error.message;
+                                        debugLog('Error has message property', errorMessage);
+                                    } else if (data.error.error_message) {
+                                        errorMessage = data.error.error_message;
+                                        debugLog('Error has error_message property', errorMessage);
+                                    } else {
+                                        debugLog('Error format unknown', data.error);
+                                    }
+                                    
+                                    // Check if this is a Special Ad Category error
+                                    if (errorMessage.includes("Special Ad Category") || 
+                                        errorMessage.includes("Advantage+") || 
+                                        errorMessage.includes("advantage_audience")) {
+                                        
+                                        // Format special ad category errors with better explanation
+                                        debugLog('Displaying Special Ad Category verification error');
+                                        statusElement.innerHTML = `
+                                            <h3>❌ Special Ad Category Restriction</h3>
+                                            <p>${errorMessage}</p>
+                                            <div class="note" style="margin-top:10px">
+                                                <strong>What does this mean?</strong><br>
+                                                Meta restricts certain targeting features like Advantage+ audience for ads in Special Ad Categories 
+                                                (housing, employment, credit, social issues, etc.). You need to use standard targeting options instead.
+                                            </div>
+                                            <div class="fix-suggestion">
+                                                <strong>How to fix:</strong><br>
+                                                To update this ad set, try setting <span class="code-block">targeting.targeting_automation.advantage_audience</span> to <span class="code-block">0</span> instead of <span class="code-block">1</span>.
+                                            </div>
+                                        `;
+                                    } else {
+                                        debugLog('Displaying standard verification error');
+                                        statusElement.innerHTML = `
+                                            <h3>❌ Error retrieving ad set details</h3>
+                                            <p>${errorMessage}</p>
+                                            <div class="raw-error" style="margin-top: 10px;">
+                                                <strong>Raw Error:</strong>
+                                                <pre>${JSON.stringify(data.error, null, 2)}</pre>
+                                            </div>
+                                        `;
+                                    }
+                                } else {
+                                    // Update success message to reflect API visibility limitations
+                                    debugLog('Verification successful');
+                                    statusElement.classList.remove('loading');
+                                    statusElement.classList.add('success');
+                                    statusElement.innerHTML = '✅ Update request was processed successfully. Please verify the changes in Meta Ads Manager UI or monitor ad performance metrics.';
+                                }
                             } catch (error) {
+                                debugLog('Error in verifyUpdate', error);
                                 const statusElement = document.getElementById('status');
                                 statusElement.classList.remove('loading');
                                 statusElement.classList.add('error');
-                                statusElement.textContent = 'Error verifying update: ' + error;
+                                statusElement.innerHTML = `
+                                    <h3>❌ Error verifying update</h3>
+                                    <p>${error.message}</p>
+                                    <pre>${error.stack}</pre>
+                                `;
                             }
                         }
-                        
-                        // Wait a moment before verifying
-                        setTimeout(verifyUpdate, 3000);
                     </script>
                 </body>
                 </html>
                 """
-                self.wfile.write(html.encode())
+                self.wfile.write(html.encode('utf-8'))
                 return
             
             elif self.path.startswith("/api/adset"):
@@ -690,12 +1095,32 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 
                 # Call the Graph API directly
                 async def get_adset_data():
-                    endpoint = f"{adset_id}"
-                    params = {
-                        "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining,frequency_control_specs"
-                    }
-                    
-                    return await make_api_request(endpoint, token, params)
+                    try:
+                        endpoint = f"{adset_id}"
+                        params = {
+                            "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining,frequency_control_specs"
+                        }
+                        
+                        result = await make_api_request(endpoint, token, params)
+                        
+                        # Check if result is a string (possibly an error message)
+                        if isinstance(result, str):
+                            try:
+                                # Try to parse as JSON
+                                parsed_result = json.loads(result)
+                                return parsed_result
+                            except json.JSONDecodeError:
+                                # Return error object if can't parse as JSON
+                                return {"error": {"message": result}}
+                                
+                        # If the result is None, return an error object
+                        if result is None:
+                            return {"error": {"message": "Empty response from API"}}
+                            
+                        return result
+                    except Exception as e:
+                        logger.error(f"Error in get_adset_data: {str(e)}")
+                        return {"error": {"message": f"Error fetching ad set data: {str(e)}"}}
                 
                 # Run the async function
                 loop = asyncio.new_event_loop()
@@ -739,17 +1164,128 @@ class CallbackHandler(BaseHTTPRequestHandler):
                     # Function to perform the actual update
                     async def perform_update():
                         try:
-                            changes_dict = json.loads(changes)
+                            # Handle potential multiple encoding of JSON
+                            decoded_changes = changes
+                            # Try multiple decode attempts to handle various encoding scenarios
+                            for _ in range(3):  # Try up to 3 levels of decoding
+                                try:
+                                    # Try to parse as JSON
+                                    changes_obj = json.loads(decoded_changes)
+                                    # If we got a string back, we need to decode again
+                                    if isinstance(changes_obj, str):
+                                        decoded_changes = changes_obj
+                                        continue
+                                    else:
+                                        # We have a dictionary, break the loop
+                                        changes_dict = changes_obj
+                                        break
+                                except json.JSONDecodeError:
+                                    # Try unescaping first
+                                    import html
+                                    decoded_changes = html.unescape(decoded_changes)
+                                    try:
+                                        changes_dict = json.loads(decoded_changes)
+                                        break
+                                    except:
+                                        # Failed to parse, will try again in the next iteration
+                                        pass
+                            else:
+                                # If we got here, we couldn't parse the JSON
+                                return {"status": "error", "error": f"Failed to decode changes JSON: {changes}"}
+                            
                             endpoint = f"{adset_id}"
                             
-                            # Create a copy of changes_dict for the API call
-                            api_params = dict(changes_dict)
+                            # Create API parameters properly
+                            api_params = {}
+                            
+                            # Add each change parameter
+                            for key, value in changes_dict.items():
+                                api_params[key] = value
+                                
+                            # Add the access token
                             api_params["access_token"] = token
+                            
+                            # Log what we're about to send
+                            logger.info(f"Sending update to Meta API for ad set {adset_id}")
+                            logger.info(f"Parameters: {json.dumps(api_params)}")
                             
                             # Make the API request to update the ad set
                             result = await make_api_request(endpoint, token, api_params, method="POST")
+                            
+                            # Log the result
+                            logger.info(f"Meta API update result: {json.dumps(result) if isinstance(result, dict) else result}")
+                            
+                            # Handle various result formats
+                            if result is None:
+                                logger.error("Empty response from Meta API")
+                                return {"status": "error", "error": "Empty response from Meta API"}
+                                
+                            # Check if the result contains an error
+                            if isinstance(result, dict) and 'error' in result:
+                                # Extract detailed error message from Meta API
+                                error_obj = result['error']
+                                error_msg = error_obj.get('message', 'Unknown API error')
+                                detailed_error = ""
+                                
+                                # Check for more detailed error messages
+                                if 'error_user_msg' in error_obj and error_obj['error_user_msg']:
+                                    detailed_error = error_obj['error_user_msg']
+                                    logger.error(f"Meta API user-facing error message: {detailed_error}")
+                                
+                                # Extract error data if available
+                                error_specs = []
+                                if 'error_data' in error_obj and isinstance(error_obj['error_data'], str):
+                                    try:
+                                        error_data = json.loads(error_obj['error_data'])
+                                        if 'blame_field_specs' in error_data and error_data['blame_field_specs']:
+                                            blame_specs = error_data['blame_field_specs']
+                                            if isinstance(blame_specs, list) and blame_specs:
+                                                if isinstance(blame_specs[0], list):
+                                                    error_specs = [msg for msg in blame_specs[0] if msg]
+                                                else:
+                                                    error_specs = [str(spec) for spec in blame_specs if spec]
+                                            
+                                            if error_specs:
+                                                logger.error(f"Meta API blame field specs: {'; '.join(error_specs)}")
+                                    except Exception as e:
+                                        logger.error(f"Error parsing error_data: {e}")
+                                
+                                # Construct most descriptive error message
+                                if detailed_error:
+                                    error_msg = detailed_error
+                                elif error_specs:
+                                    error_msg = "; ".join(error_specs)
+                                
+                                # Log the detailed error information
+                                logger.error(f"Meta API error: {error_msg}")
+                                logger.error(f"Full error object: {json.dumps(error_obj)}")
+                                
+                                return {
+                                    "status": "error", 
+                                    "error": error_msg, 
+                                    "api_error": result['error'],
+                                    "detailed_errors": error_specs,
+                                    "full_response": result
+                                }
+                            
+                            # Handle string results (which might be error messages)
+                            if isinstance(result, str):
+                                try:
+                                    # Try to parse as JSON
+                                    result_obj = json.loads(result)
+                                    if isinstance(result_obj, dict) and 'error' in result_obj:
+                                        return {"status": "error", "error": result_obj['error'].get('message', 'Unknown API error')}
+                                except:
+                                    # If not parseable as JSON, return as error message
+                                    return {"status": "error", "error": result}
+                            
+                            # If we got here, assume success
                             return {"status": "approved", "api_result": result}
                         except Exception as e:
+                            # Log the exception for debugging
+                            logger.error(f"Error in perform_update: {str(e)}")
+                            import traceback
+                            logger.error(traceback.format_exc())
                             return {"status": "error", "error": str(e)}
                     
                     # Run the async function
@@ -759,9 +1295,51 @@ class CallbackHandler(BaseHTTPRequestHandler):
                         result = loop.run_until_complete(perform_update())
                         loop.close()
                         
-                        self.wfile.write(json.dumps(result).encode())
+                        # Ensure result is a dictionary
+                        if not isinstance(result, dict):
+                            logger.error(f"Unexpected result type: {type(result)}")
+                            self.wfile.write(json.dumps({"status": "error", "error": str(result)}).encode())
+                            return
+                        
+                        # Check if the API call returned an error
+                        if result.get("status") == "error":
+                            error_message = result.get("error", "Unknown error")
+                            detailed_errors = result.get("detailed_errors", [])
+                            
+                            # Log the detailed error
+                            logger.error(f"Meta API error during ad set update: {error_message}")
+                            if "api_error" in result:
+                                logger.error(f"Detailed API error: {json.dumps(result['api_error'])}")
+                            
+                            # Prepare error response with all available details
+                            error_response = {
+                                "status": "error",
+                                "error": error_message,
+                                "errorDetails": detailed_errors
+                            }
+                            
+                            # Include the full API error object for complete details
+                            if "api_error" in result:
+                                error_response["apiError"] = result["api_error"]
+                            
+                            # Include the full response if available
+                            if "full_response" in result:
+                                error_response["fullResponse"] = result["full_response"]
+                            
+                            logger.info(f"Returning error response: {json.dumps(error_response)}")
+                            self.wfile.write(json.dumps(error_response).encode())
+                        else:
+                            logger.info("Update successful, returning result")
+                            self.wfile.write(json.dumps(result).encode())
                     except Exception as e:
-                        self.wfile.write(json.dumps({"status": "error", "error": str(e)}).encode())
+                        logger.error(f"Exception in update-confirm handler: {str(e)}")
+                        import traceback
+                        logger.error(traceback.format_exc())
+                        self.wfile.write(json.dumps({
+                            "status": "error", 
+                            "error": str(e),
+                            "traceback": traceback.format_exc()
+                        }).encode())
                 else:
                     # Store the cancellation
                     update_confirmation = {

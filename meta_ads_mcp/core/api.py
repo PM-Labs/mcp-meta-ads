@@ -59,9 +59,9 @@ async def make_api_request(
     if not access_token:
         logger.error("API request attempted with blank access token")
         return {
-            "error": "Authentication Required",
-            "details": {
-                "message": "A valid access token is required to access the Meta API",
+            "error": {
+                "message": "Authentication Required",
+                "details": "A valid access token is required to access the Meta API",
                 "action_required": "Please authenticate first"
             }
         }
@@ -89,7 +89,18 @@ async def make_api_request(
             if method == "GET":
                 response = await client.get(url, params=request_params, headers=headers, timeout=30.0)
             elif method == "POST":
-                response = await client.post(url, json=request_params, headers=headers, timeout=30.0)
+                # For Meta API, POST requests need data, not JSON
+                if 'targeting' in request_params and isinstance(request_params['targeting'], dict):
+                    # Convert targeting dict to string for the API
+                    request_params['targeting'] = json.dumps(request_params['targeting'])
+                
+                # Convert lists and dicts to JSON strings    
+                for key, value in request_params.items():
+                    if isinstance(value, (list, dict)):
+                        request_params[key] = json.dumps(value)
+                
+                logger.debug(f"POST params (prepared): {masked_params}")
+                response = await client.post(url, data=request_params, headers=headers, timeout=30.0)
             elif method == "DELETE":
                 response = await client.delete(url, params=request_params, headers=headers, timeout=30.0)
             else:
@@ -97,7 +108,16 @@ async def make_api_request(
             
             response.raise_for_status()
             logger.debug(f"API Response status: {response.status_code}")
-            return response.json()
+            
+            # Ensure the response is JSON and return it as a dictionary
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                # If not JSON, return text content in a structured format
+                return {
+                    "text_response": response.text,
+                    "status_code": response.status_code
+                }
         
         except httpx.HTTPStatusError as e:
             error_info = {}
@@ -123,8 +143,7 @@ async def make_api_request(
                         logger.error(f"Current app_id: {app_id}")
                         # Provide a clearer error message without the confusing "Provide valid app ID" message
                         return {
-                            "error": f"HTTP Error: {e.response.status_code}",
-                            "details": {
+                            "error": {
                                 "message": "Meta API authentication configuration issue. Please check your app credentials.",
                                 "original_error": error_obj.get("message"),
                                 "code": error_obj.get("code")
@@ -132,11 +151,28 @@ async def make_api_request(
                         }
                     auth_manager.invalidate_token()
             
-            return {"error": f"HTTP Error: {e.response.status_code}", "details": error_info}
+            # Include full details for technical users
+            full_response = {
+                "headers": dict(e.response.headers),
+                "status_code": e.response.status_code,
+                "url": str(e.response.url),
+                "reason": getattr(e.response, "reason_phrase", "Unknown reason"),
+                "request_method": e.request.method,
+                "request_url": str(e.request.url)
+            }
+            
+            # Return a properly structured error object
+            return {
+                "error": {
+                    "message": f"HTTP Error: {e.response.status_code}",
+                    "details": error_info,
+                    "full_response": full_response
+                }
+            }
         
         except Exception as e:
             logger.error(f"Request Error: {str(e)}")
-            return {"error": str(e)}
+            return {"error": {"message": str(e)}}
 
 
 # Generic wrapper for all Meta API tools
@@ -174,12 +210,14 @@ def meta_api_tool(func):
                 logger.warning("No access token available, authentication needed")
                 auth_url = auth_manager.get_auth_url()
                 return json.dumps({
-                    "error": "Authentication Required",
-                    "details": {
-                        "message": "You need to authenticate with the Meta API before using this tool",
-                        "action_required": "Please authenticate first",
-                        "auth_url": auth_url,
-                        "markdown_link": f"[Click here to authenticate with Meta Ads API]({auth_url})"
+                    "error": {
+                        "message": "Authentication Required",
+                        "details": {
+                            "description": "You need to authenticate with the Meta API before using this tool",
+                            "action_required": "Please authenticate first",
+                            "auth_url": auth_url,
+                            "markdown_link": f"[Click here to authenticate with Meta Ads API]({auth_url})"
+                        }
                     }
                 }, indent=2)
                 
@@ -200,18 +238,24 @@ def meta_api_tool(func):
                                 logger.error(f"Current app_id: {app_id}")
                                 # Replace the confusing error with a more user-friendly one
                                 return json.dumps({
-                                    "error": "Meta API Configuration Issue",
-                                    "details": {
-                                        "message": "Your Meta API app is not properly configured",
-                                        "action_required": "Check your META_APP_ID environment variable",
-                                        "current_app_id": app_id,
-                                        "original_error": error_obj.get("message")
+                                    "error": {
+                                        "message": "Meta API Configuration Issue",
+                                        "details": {
+                                            "description": "Your Meta API app is not properly configured",
+                                            "action_required": "Check your META_APP_ID environment variable",
+                                            "current_app_id": app_id,
+                                            "original_error": error_obj.get("message")
+                                        }
                                     }
                                 }, indent=2)
                 except Exception:
-                    # Not JSON or other parsing error, just continue
-                    pass
-                
+                    # Not JSON or other parsing error, wrap it in a dictionary
+                    return json.dumps({"data": result}, indent=2)
+            
+            # If result is already a dictionary, ensure it's properly serialized
+            if isinstance(result, dict):
+                return json.dumps(result, indent=2)
+            
             return result
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
