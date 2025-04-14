@@ -5,7 +5,7 @@ import asyncio
 from .api import meta_api_tool
 from .auth import start_callback_server, auth_manager, get_current_access_token
 from .server import mcp_server
-from .utils import logger
+from .utils import logger, META_APP_SECRET
 
 
 @mcp_server.tool()
@@ -46,6 +46,10 @@ async def get_login_link(access_token: str = None) -> str:
     login_url = auth_manager.get_auth_url()
     logger.info(f"Generated login URL: {login_url}")
     
+    # Check if we can exchange for long-lived tokens
+    token_exchange_supported = bool(META_APP_SECRET)
+    token_duration = "60 days" if token_exchange_supported else "1-2 hours"
+    
     # Return a special format that helps the LLM format the response properly
     response = {
         "login_url": login_url,
@@ -54,6 +58,11 @@ async def get_login_link(access_token: str = None) -> str:
         "markdown_link": f"[Click here to authenticate with Meta Ads]({login_url})",
         "message": "IMPORTANT: Please use the Markdown link format in your response to allow the user to click it.",
         "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",
+        "token_exchange": "enabled" if token_exchange_supported else "disabled",
+        "token_duration": token_duration,
+        "token_exchange_message": f"Your authentication token will be valid for approximately {token_duration}." + 
+                                 (" Long-lived token exchange is enabled." if token_exchange_supported else 
+                                  " To enable long-lived tokens (60 days), set the META_APP_SECRET environment variable."),
         "note": "After authenticating, the token will be automatically saved."
     }
     

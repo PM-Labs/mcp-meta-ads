@@ -13,6 +13,16 @@ import logging
 import pathlib
 import platform
 
+# Check for Meta app credentials in environment
+META_APP_ID = os.environ.get("META_APP_ID", "")
+META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
+
+# Print warning if Meta app credentials are not configured
+if not META_APP_ID:
+    print("WARNING: META_APP_ID environment variable is not set. Authentication will not work properly.")
+if not META_APP_SECRET:
+    print("WARNING: META_APP_SECRET environment variable is not set. Long-lived token exchange will not work.")
+
 # Configure logging to file
 def setup_logging():
     """Set up logging to file for troubleshooting."""

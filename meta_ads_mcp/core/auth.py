@@ -13,6 +13,7 @@ from urllib.parse import urlparse, parse_qs
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 from .utils import logger
+import requests
 
 # Auth constants
 AUTH_SCOPE = "ads_management,ads_read,business_management"
@@ -264,413 +265,519 @@ class AuthManager:
 # Callback Handler class definition
 class CallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        global token_container, auth_manager, needs_authentication
+        global token_container, auth_manager, needs_authentication, update_confirmation
         
-        if self.path.startswith("/callback"):
-            # Return a page that extracts token from URL hash fragment
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
+        try:
+            # Print path for debugging
+            print(f"Callback server received request: {self.path}")
             
-            html = """
-            <html>
-            <head><title>Authentication Successful</title></head>
-            <body>
-                <h1>Authentication Successful!</h1>
-                <p>You can close this window and return to the application.</p>
-                <script>
-                    // Extract token from URL hash
-                    const hash = window.location.hash.substring(1);
-                    const params = new URLSearchParams(hash);
-                    const token = params.get('access_token');
-                    const expires_in = params.get('expires_in');
-                    
-                    // Send token back to server using fetch
-                    fetch('/token?' + new URLSearchParams({
-                        token: token,
-                        expires_in: expires_in
-                    }))
-                    .then(response => console.log('Token sent to app'));
-                </script>
-            </body>
-            </html>
-            """
-            self.wfile.write(html.encode())
-            return
-        
-        if self.path.startswith("/confirm-update"):
-            # Parse query parameters
-            query = parse_qs(urlparse(self.path).query)
-            adset_id = query.get("adset_id", [""])[0]
-            token = query.get("token", [""])[0]
-            changes = query.get("changes", ["{}"])[0]
-            
-            try:
-                changes_dict = json.loads(changes)
-            except json.JSONDecodeError:
-                changes_dict = {}
-            
-            # Return confirmation page
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            
-            html = """
-            <html>
-            <head>
-                <title>Confirm Ad Set Update</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; max-width: 1000px; margin: 0 auto; }
-                    .warning { color: #d73a49; margin: 20px 0; padding: 15px; border-left: 4px solid #d73a49; background-color: #fff8f8; }
-                    .changes { background: #f6f8fa; padding: 15px; border-radius: 6px; }
-                    .buttons { margin-top: 20px; }
-                    button { padding: 10px 20px; margin-right: 10px; border-radius: 6px; cursor: pointer; }
-                    .approve { background: #2ea44f; color: white; border: none; }
-                    .cancel { background: #d73a49; color: white; border: none; }
-                    .diff-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-                    .diff-table td { padding: 8px; border: 1px solid #ddd; }
-                    .diff-table .header { background: #f1f8ff; font-weight: bold; }
-                    .status { padding: 15px; margin-top: 20px; border-radius: 6px; display: none; }
-                    .success { background-color: #e6ffed; border: 1px solid #2ea44f; color: #22863a; }
-                    .error { background-color: #ffeef0; border: 1px solid #d73a49; color: #d73a49; }
-                    pre { white-space: pre-wrap; word-break: break-all; }
-                </style>
-            </head>
-            <body>
-                <h1>Confirm Ad Set Update</h1>
-                <p>You are about to update Ad Set: <strong>""" + adset_id + """</strong></p>
+            if self.path.startswith("/callback"):
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
                 
-                <div class="warning">
-                    <strong>⚠️ Warning:</strong> These changes will be applied immediately upon approval.
-                    """ + ("<br><strong>🔴 Important:</strong> This update includes status changes that may affect billing." if "status" in changes_dict else "") + """
-                </div>
-                
-                <h2>Proposed Changes:</h2>
-                <div class="changes">
-                    <table class="diff-table">
-                        <tr class="header">
-                            <td>Setting</td>
-                            <td>New Value</td>
-                            <td>Description</td>
-                        </tr>
-                        """
-            
-            # Special handling for frequency_control_specs
-            for k, v in changes_dict.items():
-                description = ""
-                if k == "frequency_control_specs" and isinstance(v, list) and len(v) > 0:
-                    spec = v[0]
-                    if all(key in spec for key in ["event", "interval_days", "max_frequency"]):
-                        description = f"Cap to {spec['max_frequency']} {spec['event'].lower()} per {spec['interval_days']} days"
-                
-                # Format the value for display
-                display_value = json.dumps(v, indent=2) if isinstance(v, (dict, list)) else str(v)
-                
-                html += f"""
-                        <tr>
-                            <td>{k}</td>
-                            <td><pre>{display_value}</pre></td>
-                            <td>{description}</td>
-                        </tr>
-                        """
-            
-            html += """
-                    </table>
-                </div>
-                
-                <div class="buttons">
-                    <button class="approve" onclick="approveChanges()">Approve Changes</button>
-                    <button class="cancel" onclick="cancelChanges()">Cancel</button>
-                </div>
-                
-                <div id="status" class="status"></div>
-
-                <script>
-                    function showStatus(message, isError = false) {
-                        const statusElement = document.getElementById('status');
-                        statusElement.textContent = message;
-                        statusElement.style.display = 'block';
-                        if (isError) {
-                            statusElement.classList.add('error');
-                            statusElement.classList.remove('success');
-                        } else {
-                            statusElement.classList.add('success');
-                            statusElement.classList.remove('error');
+                # Get the token from the fragment
+                # We need to handle it via JS since the fragment is not sent to the server
+                callback_html = """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Authentication Successful</title>
+                    <style>
+                        body { 
+                            font-family: Arial, sans-serif; 
+                            line-height: 1.6;
+                            color: #333;
+                            max-width: 800px;
+                            margin: 0 auto;
+                            padding: 20px;
                         }
+                        .success { 
+                            color: #4CAF50;
+                            font-size: 24px;
+                            margin-bottom: 20px;
+                        }
+                        .info {
+                            background-color: #f5f5f5;
+                            padding: 15px;
+                            border-radius: 4px;
+                            margin-bottom: 20px;
+                        }
+                        .button {
+                            background-color: #4CAF50;
+                            color: white;
+                            padding: 10px 15px;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="success">Authentication Successful!</div>
+                    <div class="info">
+                        <p>Your Meta Ads API token has been received.</p>
+                        <p>You can now close this window and return to the application.</p>
+                    </div>
+                    <button class="button" onclick="window.close()">Close Window</button>
+                    
+                    <script>
+                    // Function to parse URL parameters including fragments
+                    function parseURL(url) {
+                        var params = {};
+                        var parser = document.createElement('a');
+                        parser.href = url;
+                        
+                        // Parse fragment parameters
+                        var fragment = parser.hash.substring(1);
+                        var fragmentParams = fragment.split('&');
+                        
+                        for (var i = 0; i < fragmentParams.length; i++) {
+                            var pair = fragmentParams[i].split('=');
+                            params[pair[0]] = decodeURIComponent(pair[1]);
+                        }
+                        
+                        return params;
                     }
                     
-                    function approveChanges() {
-                        showStatus("Processing update...");
+                    // Parse the URL to get the access token
+                    var params = parseURL(window.location.href);
+                    var token = params['access_token'];
+                    var expires_in = params['expires_in'];
+                    
+                    // Send the token to the server
+                    if (token) {
+                        // Create XMLHttpRequest object
+                        var xhr = new XMLHttpRequest();
                         
-                        const buttons = document.querySelectorAll('button');
-                        buttons.forEach(button => button.disabled = true);
+                        // Configure it to make a GET request to the /token endpoint
+                        xhr.open('GET', '/token?token=' + encodeURIComponent(token) + 
+                                      '&expires_in=' + encodeURIComponent(expires_in), true);
                         
-                        fetch('/update-confirm?' + new URLSearchParams({
-                            adset_id: '""" + adset_id + """',
-                            token: '""" + token + """',
-                            changes: '""" + changes + """',
-                            action: 'approve'
-                        }))
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.error) {
-                                showStatus('Error applying changes: ' + data.error, true);
-                                buttons.forEach(button => button.disabled = false);
+                        // Set up a handler for when the request is complete
+                        xhr.onload = function() {
+                            if (xhr.status === 200) {
+                                console.log('Token successfully sent to server');
                             } else {
-                                showStatus('Changes approved and will be applied shortly!');
-                                setTimeout(() => {
-                                    window.location.href = '/verify-update?' + new URLSearchParams({
-                                        adset_id: '""" + adset_id + """',
-                                        token: '""" + token + """'
-                                    });
-                                }, 3000);
+                                console.error('Failed to send token to server');
                             }
-                        })
-                        .catch(error => {
-                            showStatus('Error applying changes: ' + error, true);
-                            buttons.forEach(button => button.disabled = false);
-                        });
-                    }
-                    
-                    function cancelChanges() {
-                        showStatus("Cancelling update...");
+                        };
                         
-                        fetch('/update-confirm?' + new URLSearchParams({
-                            adset_id: '""" + adset_id + """',
-                            action: 'cancel'
-                        }))
-                        .then(() => {
-                            showStatus('Update cancelled.');
-                            setTimeout(() => window.close(), 2000);
-                        });
+                        // Send the request
+                        xhr.send();
+                    } else {
+                        console.error('No token found in URL');
+                        document.body.innerHTML += '<div style="color: red; margin-top: 20px;">Error: No authentication token found. Please try again.</div>';
                     }
-                </script>
-            </body>
-            </html>
-            """
-            self.wfile.write(html.encode())
-            return
-        
-        if self.path.startswith("/verify-update"):
-            # Parse query parameters
-            query = parse_qs(urlparse(self.path).query)
-            adset_id = query.get("adset_id", [""])[0]
-            token = query.get("token", [""])[0]
-            
-            # Respond with a verification page
-            self.send_response(200)
-            self.send_header("Content-type", "text/html")
-            self.end_headers()
-            
-            html = """
-            <html>
-            <head>
-                <title>Verifying Ad Set Update</title>
-                <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; margin: 0 auto; }
-                    .status { padding: 15px; margin-top: 20px; border-radius: 6px; }
-                    .loading { background-color: #f1f8ff; border: 1px solid #0366d6; }
-                    .success { background-color: #e6ffed; border: 1px solid #2ea44f; color: #22863a; }
-                    .error { background-color: #ffeef0; border: 1px solid #d73a49; color: #d73a49; }
-                    .details { background: #f6f8fa; padding: 15px; border-radius: 6px; margin-top: 20px; }
-                    .note { background-color: #fff8c5; border: 1px solid #e36209; padding: 15px; border-radius: 6px; margin: 20px 0; }
-                    pre { white-space: pre-wrap; word-break: break-all; }
-                    .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top-color: #0366d6; animation: spin 1s ease-in-out infinite; margin-right: 10px; }
-                    @keyframes spin { to { transform: rotate(360deg); } }
-                </style>
-            </head>
-            <body>
-                <h1>Verifying Ad Set Update</h1>
-                <p>Checking the status of your update for Ad Set <strong>""" + adset_id + """</strong></p>
+                    </script>
+                </body>
+                </html>
+                """
+                self.wfile.write(callback_html.encode())
+                return
                 
-                <div class="note">
-                    <strong>Note about Meta API Visibility:</strong>
-                    <p>Some fields (like frequency caps) may not be visible in the API response even when successfully set. This is a limitation of the Meta API and depends on factors like the ad set's optimization goal. You can verify these settings in the Meta Ads Manager UI or by monitoring metrics like frequency in the ad insights.</p>
-                </div>
+            elif self.path.startswith("/token"):
+                # Extract token from query params
+                query = parse_qs(urlparse(self.path).query)
+                token_container["token"] = query.get("token", [""])[0]
                 
-                <div id="status" class="status loading">
-                    <div class="spinner"></div> Verifying update...
-                </div>
+                if "expires_in" in query:
+                    try:
+                        token_container["expires_in"] = int(query.get("expires_in", ["0"])[0])
+                    except ValueError:
+                        token_container["expires_in"] = None
                 
-                <div id="details" class="details" style="display: none;">
-                    <h3>Updated Ad Set Details:</h3>
-                    <pre id="adset-details">Loading...</pre>
-                </div>
-
-                <script>
-                    // Function to fetch the ad set details and check if frequency_control_specs was updated
-                    async function verifyUpdate() {
-                        try {
-                            const response = await fetch('/api/adset?' + new URLSearchParams({
-                                adset_id: '""" + adset_id + """',
-                                token: '""" + token + """'
-                            }));
-                            
-                            const data = await response.json();
-                            const statusElement = document.getElementById('status');
-                            const detailsElement = document.getElementById('details');
-                            const adsetDetailsElement = document.getElementById('adset-details');
-                            
-                            detailsElement.style.display = 'block';
-                            adsetDetailsElement.textContent = JSON.stringify(data, null, 2);
-                            
-                            // Update success message to reflect API visibility limitations
-                            statusElement.classList.remove('loading');
-                            statusElement.classList.add('success');
-                            statusElement.innerHTML = '✅ Update request was processed successfully. Please verify the changes in Meta Ads Manager UI or monitor ad performance metrics.';
-                        } catch (error) {
-                            const statusElement = document.getElementById('status');
-                            statusElement.classList.remove('loading');
-                            statusElement.classList.add('error');
-                            statusElement.textContent = 'Error verifying update: ' + error;
-                        }
-                    }
+                # Send success response
+                self.send_response(200)
+                self.send_header("Content-type", "text/plain")
+                self.end_headers()
+                self.wfile.write(b"Token received")
+                
+                # Process the token (save it) immediately
+                if token_container["token"]:
+                    # Get the short-lived token
+                    short_lived_token = token_container["token"]
                     
-                    // Wait a moment before verifying
-                    setTimeout(verifyUpdate, 3000);
-                </script>
-            </body>
-            </html>
-            """
-            self.wfile.write(html.encode())
-            return
+                    # Try to exchange for a long-lived token
+                    long_lived_token_info = exchange_token_for_long_lived(short_lived_token)
+                    
+                    if long_lived_token_info:
+                        # Successfully exchanged for long-lived token
+                        logger.info(f"Token received and exchanged for long-lived token (expires in {long_lived_token_info.expires_in} seconds)")
+                        
+                        try:
+                            # Set the token info in the auth_manager
+                            auth_manager.token_info = long_lived_token_info
+                            logger.info(f"Long-lived token info set in auth_manager, expires in {long_lived_token_info.expires_in} seconds")
+                            
+                            # Save to cache
+                            auth_manager._save_token_to_cache()
+                            logger.info(f"Long-lived token successfully saved to cache at {auth_manager._get_token_cache_path()}")
+                        except Exception as e:
+                            logger.error(f"Error saving long-lived token to cache: {e}")
+                    else:
+                        # Fall back to the short-lived token
+                        logger.warning("Failed to exchange for long-lived token, using short-lived token instead")
+                        token_info = TokenInfo(
+                            access_token=token_container["token"],
+                            expires_in=token_container["expires_in"]
+                        )
+                        
+                        try:
+                            # Set the token info in the auth_manager
+                            auth_manager.token_info = token_info
+                            logger.info(f"Token info set in auth_manager, expires in {token_info.expires_in} seconds")
+                            
+                            # Save to cache
+                            auth_manager._save_token_to_cache()
+                            logger.info(f"Token successfully saved to cache at {auth_manager._get_token_cache_path()}")
+                        except Exception as e:
+                            logger.error(f"Error saving token to cache: {e}")
+                    
+                    # Reset auth needed flag
+                    needs_authentication = False
+                    
+                    return token_container["token"]
+                else:
+                    logger.warning("Received empty token in callback")
+                    needs_authentication = True
+                    return None
             
-        if self.path.startswith("/api/adset"):
-            # Parse query parameters
-            query = parse_qs(urlparse(self.path).query)
-            adset_id = query.get("adset_id", [""])[0]
-            token = query.get("token", [""])[0]
-            
-            from .api import make_api_request
-            
-            # Call the Graph API directly
-            async def get_adset_data():
-                endpoint = f"{adset_id}"
-                params = {
-                    "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining,frequency_control_specs"
-                }
-                
-                return await make_api_request(endpoint, token, params)
-            
-            # Run the async function
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(get_adset_data())
-            loop.close()
-            
-            # Return the result
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(result, indent=2).encode())
-            return
-        
-        if self.path.startswith("/update-confirm"):
-            # Handle update confirmation response
-            query = parse_qs(urlparse(self.path).query)
-            action = query.get("action", [""])[0]
-            
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            
-            if action == "approve":
+            elif self.path.startswith("/confirm-update"):
+                # Parse query parameters
+                query = parse_qs(urlparse(self.path).query)
                 adset_id = query.get("adset_id", [""])[0]
                 token = query.get("token", [""])[0]
                 changes = query.get("changes", ["{}"])[0]
                 
-                # Store the approval in a global variable for the main thread to process
-                global update_confirmation
-                update_confirmation = {
-                    "approved": True,
-                    "adset_id": adset_id,
-                    "token": token,
-                    "changes": changes
-                }
+                try:
+                    changes_dict = json.loads(changes)
+                except json.JSONDecodeError:
+                    changes_dict = {}
                 
-                # Prepare the API call to actually execute the update
+                # Return confirmation page
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                
+                html = """
+                <html>
+                <head>
+                    <title>Confirm Ad Set Update</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; max-width: 1000px; margin: 0 auto; }
+                        .warning { color: #d73a49; margin: 20px 0; padding: 15px; border-left: 4px solid #d73a49; background-color: #fff8f8; }
+                        .changes { background: #f6f8fa; padding: 15px; border-radius: 6px; }
+                        .buttons { margin-top: 20px; }
+                        button { padding: 10px 20px; margin-right: 10px; border-radius: 6px; cursor: pointer; }
+                        .approve { background: #2ea44f; color: white; border: none; }
+                        .cancel { background: #d73a49; color: white; border: none; }
+                        .diff-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+                        .diff-table td { padding: 8px; border: 1px solid #ddd; }
+                        .diff-table .header { background: #f1f8ff; font-weight: bold; }
+                        .status { padding: 15px; margin-top: 20px; border-radius: 6px; display: none; }
+                        .success { background-color: #e6ffed; border: 1px solid #2ea44f; color: #22863a; }
+                        .error { background-color: #ffeef0; border: 1px solid #d73a49; color: #d73a49; }
+                        pre { white-space: pre-wrap; word-break: break-all; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Confirm Ad Set Update</h1>
+                    <p>You are about to update Ad Set: <strong>""" + adset_id + """</strong></p>
+                    
+                    <div class="warning">
+                        <strong>⚠️ Warning:</strong> These changes will be applied immediately upon approval.
+                        """ + ("<br><strong>🔴 Important:</strong> This update includes status changes that may affect billing." if "status" in changes_dict else "") + """
+                    </div>
+                    
+                    <h2>Proposed Changes:</h2>
+                    <div class="changes">
+                        <table class="diff-table">
+                            <tr class="header">
+                                <td>Setting</td>
+                                <td>New Value</td>
+                                <td>Description</td>
+                            </tr>
+                            """
+                
+                # Special handling for frequency_control_specs
+                for k, v in changes_dict.items():
+                    description = ""
+                    if k == "frequency_control_specs" and isinstance(v, list) and len(v) > 0:
+                        spec = v[0]
+                        if all(key in spec for key in ["event", "interval_days", "max_frequency"]):
+                            description = f"Cap to {spec['max_frequency']} {spec['event'].lower()} per {spec['interval_days']} days"
+                
+                    # Format the value for display
+                    display_value = json.dumps(v, indent=2) if isinstance(v, (dict, list)) else str(v)
+                    
+                    html += f"""
+                            <tr>
+                                <td>{k}</td>
+                                <td><pre>{display_value}</pre></td>
+                                <td>{description}</td>
+                            </tr>
+                            """
+                
+                html += """
+                        </table>
+                    </div>
+                    
+                    <div class="buttons">
+                        <button class="approve" onclick="approveChanges()">Approve Changes</button>
+                        <button class="cancel" onclick="cancelChanges()">Cancel</button>
+                    </div>
+                    
+                    <div id="status" class="status"></div>
+
+                    <script>
+                        function showStatus(message, isError = false) {
+                            const statusElement = document.getElementById('status');
+                            statusElement.textContent = message;
+                            statusElement.style.display = 'block';
+                            if (isError) {
+                                statusElement.classList.add('error');
+                                statusElement.classList.remove('success');
+                            } else {
+                                statusElement.classList.add('success');
+                                statusElement.classList.remove('error');
+                            }
+                        }
+                        
+                        function approveChanges() {
+                            showStatus("Processing update...");
+                            
+                            const buttons = document.querySelectorAll('button');
+                            buttons.forEach(button => button.disabled = true);
+                            
+                            fetch('/update-confirm?' + new URLSearchParams({
+                                adset_id: '""" + adset_id + """',
+                                token: '""" + token + """',
+                                changes: '""" + changes + """',
+                                action: 'approve'
+                            }))
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.error) {
+                                    showStatus('Error applying changes: ' + data.error, true);
+                                    buttons.forEach(button => button.disabled = false);
+                                } else {
+                                    showStatus('Changes approved and will be applied shortly!');
+                                    setTimeout(() => {
+                                        window.location.href = '/verify-update?' + new URLSearchParams({
+                                            adset_id: '""" + adset_id + """',
+                                            token: '""" + token + """'
+                                        });
+                                    }, 3000);
+                                }
+                            })
+                            .catch(error => {
+                                showStatus('Error applying changes: ' + error, true);
+                                buttons.forEach(button => button.disabled = false);
+                            });
+                        }
+                        
+                        function cancelChanges() {
+                            showStatus("Cancelling update...");
+                            
+                            fetch('/update-confirm?' + new URLSearchParams({
+                                adset_id: '""" + adset_id + """',
+                                action: 'cancel'
+                            }))
+                            .then(() => {
+                                showStatus('Update cancelled.');
+                                setTimeout(() => window.close(), 2000);
+                            });
+                        }
+                    </script>
+                </body>
+                </html>
+                """
+                self.wfile.write(html.encode())
+                return
+            
+            elif self.path.startswith("/verify-update"):
+                # Parse query parameters
+                query = parse_qs(urlparse(self.path).query)
+                adset_id = query.get("adset_id", [""])[0]
+                token = query.get("token", [""])[0]
+                
+                # Respond with a verification page
+                self.send_response(200)
+                self.send_header("Content-type", "text/html")
+                self.end_headers()
+                
+                html = """
+                <html>
+                <head>
+                    <title>Verifying Ad Set Update</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; margin: 0 auto; }
+                        .status { padding: 15px; margin-top: 20px; border-radius: 6px; }
+                        .loading { background-color: #f1f8ff; border: 1px solid #0366d6; }
+                        .success { background-color: #e6ffed; border: 1px solid #2ea44f; color: #22863a; }
+                        .error { background-color: #ffeef0; border: 1px solid #d73a49; color: #d73a49; }
+                        .details { background: #f6f8fa; padding: 15px; border-radius: 6px; margin-top: 20px; }
+                        .note { background-color: #fff8c5; border: 1px solid #e36209; padding: 15px; border-radius: 6px; margin: 20px 0; }
+                        pre { white-space: pre-wrap; word-break: break-all; }
+                        .spinner { display: inline-block; width: 20px; height: 20px; border: 3px solid rgba(0, 0, 0, 0.1); border-radius: 50%; border-top-color: #0366d6; animation: spin 1s ease-in-out infinite; margin-right: 10px; }
+                        @keyframes spin { to { transform: rotate(360deg); } }
+                    </style>
+                </head>
+                <body>
+                    <h1>Verifying Ad Set Update</h1>
+                    <p>Checking the status of your update for Ad Set <strong>""" + adset_id + """</strong></p>
+                    
+                    <div class="note">
+                        <strong>Note about Meta API Visibility:</strong>
+                        <p>Some fields (like frequency caps) may not be visible in the API response even when successfully set. This is a limitation of the Meta API and depends on factors like the ad set's optimization goal. You can verify these settings in the Meta Ads Manager UI or by monitoring metrics like frequency in the ad insights.</p>
+                    </div>
+                    
+                    <div id="status" class="status loading">
+                        <div class="spinner"></div> Verifying update...
+                    </div>
+                    
+                    <div id="details" class="details" style="display: none;">
+                        <h3>Updated Ad Set Details:</h3>
+                        <pre id="adset-details">Loading...</pre>
+                    </div>
+
+                    <script>
+                        // Function to fetch the ad set details and check if frequency_control_specs was updated
+                        async function verifyUpdate() {
+                            try {
+                                const response = await fetch('/api/adset?' + new URLSearchParams({
+                                    adset_id: '""" + adset_id + """',
+                                    token: '""" + token + """'
+                                }));
+                                
+                                const data = await response.json();
+                                const statusElement = document.getElementById('status');
+                                const detailsElement = document.getElementById('details');
+                                const adsetDetailsElement = document.getElementById('adset-details');
+                                
+                                detailsElement.style.display = 'block';
+                                adsetDetailsElement.textContent = JSON.stringify(data, null, 2);
+                                
+                                // Update success message to reflect API visibility limitations
+                                statusElement.classList.remove('loading');
+                                statusElement.classList.add('success');
+                                statusElement.innerHTML = '✅ Update request was processed successfully. Please verify the changes in Meta Ads Manager UI or monitor ad performance metrics.';
+                            } catch (error) {
+                                const statusElement = document.getElementById('status');
+                                statusElement.classList.remove('loading');
+                                statusElement.classList.add('error');
+                                statusElement.textContent = 'Error verifying update: ' + error;
+                            }
+                        }
+                        
+                        // Wait a moment before verifying
+                        setTimeout(verifyUpdate, 3000);
+                    </script>
+                </body>
+                </html>
+                """
+                self.wfile.write(html.encode())
+                return
+            
+            elif self.path.startswith("/api/adset"):
+                # Parse query parameters
+                query = parse_qs(urlparse(self.path).query)
+                adset_id = query.get("adset_id", [""])[0]
+                token = query.get("token", [""])[0]
+                
                 from .api import make_api_request
                 
-                # Function to perform the actual update
-                async def perform_update():
-                    try:
-                        changes_dict = json.loads(changes)
-                        endpoint = f"{adset_id}"
-                        
-                        # Create a copy of changes_dict for the API call
-                        api_params = dict(changes_dict)
-                        api_params["access_token"] = token
-                        
-                        # Make the API request to update the ad set
-                        result = await make_api_request(endpoint, token, api_params, method="POST")
-                        return {"status": "approved", "api_result": result}
-                    except Exception as e:
-                        return {"status": "error", "error": str(e)}
+                # Call the Graph API directly
+                async def get_adset_data():
+                    endpoint = f"{adset_id}"
+                    params = {
+                        "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining,frequency_control_specs"
+                    }
+                    
+                    return await make_api_request(endpoint, token, params)
                 
                 # Run the async function
-                try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    result = loop.run_until_complete(perform_update())
-                    loop.close()
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                result = loop.run_until_complete(get_adset_data())
+                loop.close()
+                
+                # Return the result
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(result, indent=2).encode())
+                return
+            
+            elif self.path.startswith("/update-confirm"):
+                # Handle update confirmation response
+                query = parse_qs(urlparse(self.path).query)
+                action = query.get("action", [""])[0]
+                
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                
+                if action == "approve":
+                    adset_id = query.get("adset_id", [""])[0]
+                    token = query.get("token", [""])[0]
+                    changes = query.get("changes", ["{}"])[0]
                     
-                    self.wfile.write(json.dumps(result).encode())
-                except Exception as e:
-                    self.wfile.write(json.dumps({"status": "error", "error": str(e)}).encode())
+                    # Store the approval in a global variable for the main thread to process
+                    global update_confirmation
+                    update_confirmation = {
+                        "approved": True,
+                        "adset_id": adset_id,
+                        "token": token,
+                        "changes": changes
+                    }
+                    
+                    # Prepare the API call to actually execute the update
+                    from .api import make_api_request
+                    
+                    # Function to perform the actual update
+                    async def perform_update():
+                        try:
+                            changes_dict = json.loads(changes)
+                            endpoint = f"{adset_id}"
+                            
+                            # Create a copy of changes_dict for the API call
+                            api_params = dict(changes_dict)
+                            api_params["access_token"] = token
+                            
+                            # Make the API request to update the ad set
+                            result = await make_api_request(endpoint, token, api_params, method="POST")
+                            return {"status": "approved", "api_result": result}
+                        except Exception as e:
+                            return {"status": "error", "error": str(e)}
+                    
+                    # Run the async function
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        result = loop.run_until_complete(perform_update())
+                        loop.close()
+                        
+                        self.wfile.write(json.dumps(result).encode())
+                    except Exception as e:
+                        self.wfile.write(json.dumps({"status": "error", "error": str(e)}).encode())
+                else:
+                    # Store the cancellation
+                    update_confirmation = {
+                        "approved": False
+                    }
+                    self.wfile.write(json.dumps({"status": "cancelled"}).encode())
+                return
+            
             else:
-                # Store the cancellation
-                update_confirmation = {
-                    "approved": False
-                }
-                self.wfile.write(json.dumps({"status": "cancelled"}).encode())
-            return
-        
-        if self.path.startswith("/token"):
-            # Extract token from query params
-            query = parse_qs(urlparse(self.path).query)
-            token_container["token"] = query.get("token", [""])[0]
-            
-            if "expires_in" in query:
-                try:
-                    token_container["expires_in"] = int(query.get("expires_in", ["0"])[0])
-                except ValueError:
-                    token_container["expires_in"] = None
-            
-            # Send success response
-            self.send_response(200)
-            self.send_header("Content-type", "text/plain")
+                # If no matching path, return a 404 error
+                self.send_response(404)
+                self.end_headers()
+        except Exception as e:
+            print(f"Error processing request: {e}")
+            self.send_response(500)
             self.end_headers()
-            self.wfile.write(b"Token received")
-            
-            # Process the token (save it) immediately
-            if token_container["token"]:
-                # Create token info and save to cache
-                logger.info("Token received in callback handler, attempting to save to cache")
-                token_info = TokenInfo(
-                    access_token=token_container["token"],
-                    expires_in=token_container["expires_in"]
-                )
-                
-                try:
-                    # Set the token info in the auth_manager first
-                    global auth_manager
-                    auth_manager.token_info = token_info
-                    logger.info(f"Token info set in auth_manager, expires in {token_info.expires_in} seconds")
-                    
-                    # Save to cache
-                    auth_manager._save_token_to_cache()
-                    logger.info(f"Token successfully saved to cache at {auth_manager._get_token_cache_path()}")
-                except Exception as e:
-                    logger.error(f"Error saving token to cache: {e}")
-                
-                # Reset auth needed flag
-                needs_authentication = False
-                
-                return token_container["token"]
-            else:
-                logger.warning("Received empty token in callback")
-                needs_authentication = True
-                return None
     
     # Silence server logs
     def log_message(self, format, *args):
@@ -761,35 +868,121 @@ def start_callback_server():
 
 def process_token_response(token_container):
     """Process the token response from Facebook."""
-    global needs_authentication
+    global needs_authentication, auth_manager
     
     if token_container and token_container.get('token'):
         logger.info("Processing token response from Facebook OAuth")
-        token_info = TokenInfo(
-            access_token=token_container['token'],
-            expires_in=token_container.get('expires_in', 0)
-        )
         
-        try:
-            global auth_manager
-            auth_manager.token_info = token_info
-            logger.info(f"Token info set in auth_manager, expires in {token_info.expires_in} seconds")
-        except NameError:
-            logger.error("auth_manager not defined when trying to process token")
+        # Exchange the short-lived token for a long-lived token
+        short_lived_token = token_container['token']
+        long_lived_token_info = exchange_token_for_long_lived(short_lived_token)
+        
+        if long_lived_token_info:
+            logger.info(f"Successfully exchanged for long-lived token (expires in {long_lived_token_info.expires_in} seconds)")
             
-        try:
-            logger.info("Attempting to save token to cache")
-            auth_manager._save_token_to_cache()
-            logger.info(f"Token successfully saved to cache at {auth_manager._get_token_cache_path()}")
-        except Exception as e:
-            logger.error(f"Error saving token to cache: {e}")
+            try:
+                auth_manager.token_info = long_lived_token_info
+                logger.info(f"Long-lived token info set in auth_manager, expires in {long_lived_token_info.expires_in} seconds")
+            except NameError:
+                logger.error("auth_manager not defined when trying to process token")
+                
+            try:
+                logger.info("Attempting to save long-lived token to cache")
+                auth_manager._save_token_to_cache()
+                logger.info(f"Long-lived token successfully saved to cache at {auth_manager._get_token_cache_path()}")
+            except Exception as e:
+                logger.error(f"Error saving token to cache: {e}")
+                
+            needs_authentication = False
+            return True
+        else:
+            # Fall back to the short-lived token if exchange fails
+            logger.warning("Failed to exchange for long-lived token, using short-lived token instead")
+            token_info = TokenInfo(
+                access_token=short_lived_token,
+                expires_in=token_container.get('expires_in', 0)
+            )
             
-        needs_authentication = False
-        return True
+            try:
+                auth_manager.token_info = token_info
+                logger.info(f"Short-lived token info set in auth_manager, expires in {token_info.expires_in} seconds")
+            except NameError:
+                logger.error("auth_manager not defined when trying to process token")
+                
+            try:
+                logger.info("Attempting to save token to cache")
+                auth_manager._save_token_to_cache()
+                logger.info(f"Token successfully saved to cache at {auth_manager._get_token_cache_path()}")
+            except Exception as e:
+                logger.error(f"Error saving token to cache: {e}")
+                
+            needs_authentication = False
+            return True
     else:
         logger.warning("Received empty token in process_token_response")
         needs_authentication = True
         return False
+
+
+def exchange_token_for_long_lived(short_lived_token):
+    """
+    Exchange a short-lived token for a long-lived token (60 days validity).
+    
+    Args:
+        short_lived_token: The short-lived access token received from OAuth flow
+        
+    Returns:
+        TokenInfo object with the long-lived token, or None if exchange failed
+    """
+    logger.info("Attempting to exchange short-lived token for long-lived token")
+    
+    try:
+        # Get the app ID from the configuration
+        app_id = meta_config.get_app_id()
+        
+        # Get the app secret - this should be securely stored
+        app_secret = os.environ.get("META_APP_SECRET", "")
+        
+        if not app_id or not app_secret:
+            logger.error("Missing app_id or app_secret for token exchange")
+            return None
+            
+        # Make the API request to exchange the token
+        url = "https://graph.facebook.com/v18.0/oauth/access_token"
+        params = {
+            "grant_type": "fb_exchange_token",
+            "client_id": app_id,
+            "client_secret": app_secret,
+            "fb_exchange_token": short_lived_token
+        }
+        
+        logger.debug(f"Making token exchange request to {url}")
+        response = requests.get(url, params=params)
+        
+        if response.status_code == 200:
+            data = response.json()
+            logger.debug(f"Token exchange response: {data}")
+            
+            # Create TokenInfo from the response
+            # The response includes access_token and expires_in (in seconds)
+            new_token = data.get("access_token")
+            expires_in = data.get("expires_in")
+            
+            if new_token:
+                logger.info(f"Received long-lived token, expires in {expires_in} seconds (~{expires_in//86400} days)")
+                return TokenInfo(
+                    access_token=new_token,
+                    expires_in=expires_in
+                )
+            else:
+                logger.error("No access_token in exchange response")
+                return None
+        else:
+            logger.error(f"Token exchange failed with status {response.status_code}: {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Error exchanging token: {e}")
+        return None
 
 
 async def get_current_access_token() -> Optional[str]:
