@@ -182,8 +182,13 @@ class CallbackHandler(BaseHTTPRequestHandler):
         # Extract query parameters
         query = parse_qs(urlparse(self.path).query)
         adset_id = query.get("adset_id", [""])[0]
+        ad_id = query.get("ad_id", [""])[0]
         token = query.get("token", [""])[0]
         changes = query.get("changes", ["{}"])[0]
+        
+        # Determine what type of object we're updating
+        object_id = ad_id if ad_id else adset_id
+        object_type = "Ad" if ad_id else "Ad Set"
         
         try:
             changes_dict = json.loads(changes)
@@ -201,7 +206,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
         html = """
         <html>
         <head>
-            <title>Confirm Ad Set Update</title>
+            <title>Confirm """ + object_type + """ Update</title>
             <meta charset="utf-8">
             <style>
                 body { font-family: Arial, sans-serif; margin: 20px; max-width: 1000px; margin: 0 auto; }
@@ -221,11 +226,11 @@ class CallbackHandler(BaseHTTPRequestHandler):
             </style>
         </head>
         <body>
-            <h1>Confirm Ad Set Update</h1>
-            <p>You are about to update Ad Set: <strong>""" + adset_id + """</strong></p>
+            <h1>Confirm """ + object_type + """ Update</h1>
+            <p>You are about to update """ + object_type + """: <strong>""" + object_id + """</strong></p>
             
             <div class="warning">
-                <p><strong>Warning:</strong> This action will directly update your ad set in Meta Ads. Please review the changes carefully before approving.</p>
+                <p><strong>Warning:</strong> This action will directly update your """ + object_type.lower() + """ in Meta Ads. Please review the changes carefully before approving.</p>
             </div>
             
             <div class="changes">
@@ -278,125 +283,73 @@ class CallbackHandler(BaseHTTPRequestHandler):
             <div id="status" class="status"></div>
 
             <script>
-                // Enable debug logging
-                const DEBUG = true;
-                function debugLog(message, data) {
-                    if (DEBUG) {
-                        if (data) {
-                            console.log(`[DEBUG-CONFIRM] ${message}:`, data);
-                        } else {
-                            console.log(`[DEBUG-CONFIRM] ${message}`);
-                        }
+                // Get the approve button
+                const approveBtn = document.querySelector('.approve');
+                const cancelBtn = document.querySelector('.cancel');
+                const statusDiv = document.querySelector('.status');
+                
+                let debugMode = false;
+                // Function to log debug messages
+                function debugLog(...args) {
+                    if (debugMode) {
+                        console.log(...args);
                     }
                 }
                 
+                // Add event listeners to buttons
+                approveBtn.addEventListener('click', approveChanges);
+                cancelBtn.addEventListener('click', cancelChanges);
+                
                 function showStatus(message, isError = false) {
-                    const statusElement = document.getElementById('status');
-                    statusElement.textContent = message;
-                    statusElement.style.display = 'block';
-                    if (isError) {
-                        statusElement.classList.add('error');
-                        statusElement.classList.remove('success');
-                    } else {
-                        statusElement.classList.add('success');
-                        statusElement.classList.remove('error');
-                    }
+                    statusDiv.textContent = message;
+                    statusDiv.style.display = 'block';
+                    statusDiv.className = 'status ' + (isError ? 'error' : 'success');
                 }
                 
                 function approveChanges() {
-                    showStatus("Processing update...");
-                    debugLog("Approving changes");
-                    
-                    const buttons = document.querySelectorAll('button');
+                    // Disable buttons to prevent double-submission
+                    const buttons = [approveBtn, cancelBtn];
                     buttons.forEach(button => button.disabled = true);
                     
+                    showStatus('Approving changes...');
+                    
+                    // Determine which object type we're updating
+                    const isAd = Boolean('""" + ad_id + """'); 
+                    const objectType = isAd ? 'ad' : 'adset';
+                    const objectId = '""" + object_id + """';
+                    
+                    // Create parameters
                     const params = new URLSearchParams({
-                        adset_id: '""" + adset_id + """',
+                        action: 'approve',
                         token: '""" + token + """',
-                        changes: '""" + escaped_changes + """',
-                        action: 'approve'
+                        changes: '""" + escaped_changes + """'
                     });
                     
+                    // Add the appropriate ID parameter based on object type
+                    if (isAd) {
+                        params.append('ad_id', objectId);
+                    } else {
+                        params.append('adset_id', objectId);
+                    }
+                    
                     debugLog("Sending update request with params", {
-                        adset_id: '""" + adset_id + """',
+                        objectType,
+                        objectId,
                         changes: JSON.parse('""" + escaped_changes + """')
                     });
                     
                     fetch('/update-confirm?' + params)
-                    .then(response => {
-                        debugLog("Received response", { status: response.status });
-                        return response.text().then(text => {
-                            debugLog("Raw response text", text);
-                            try {
-                                return JSON.parse(text);
-                            } catch (e) {
-                                debugLog("Error parsing JSON response", e);
-                                return { status: "error", error: "Invalid response format from server" };
-                            }
-                        });
-                    })
+                    .then(response => response.json())
                     .then(data => {
-                        debugLog("Parsed response data", data);
+                        debugLog("Update response data", data);
+                        buttons.forEach(button => button.disabled = false);
                         
-                        if (data.status === "error") {
-                            // Build a properly encoded and detailed error message
-                            let errorMessage = data.error || "Unknown error";
+                        // Handle result
+                        if (data.status === 'error') {
+                            let errorMessage = data.error || 'Unknown error';
+                            const originalErrorDetails = data.api_error || {};
                             
-                            // Extract the most appropriate error message for display
-                            const extractBestErrorMessage = (errorData) => {
-                                // Try to find the most user-friendly message in the error data
-                                if (!errorData) return null;
-                                
-                                // Meta often puts the most user-friendly message in error_user_msg
-                                if (errorData.apiError && errorData.apiError.error_user_msg) {
-                                    return errorData.apiError.error_user_msg;
-                                }
-                                
-                                // Look for detailed error messages in blame_field_specs
-                                try {
-                                    if (errorData.apiError && errorData.apiError.error_data) {
-                                        const errorDataObj = typeof errorData.apiError.error_data === 'string' 
-                                            ? JSON.parse(errorData.apiError.error_data) 
-                                            : errorData.apiError.error_data;
-                                        
-                                        if (errorDataObj.blame_field_specs && errorDataObj.blame_field_specs.length > 0) {
-                                            // Handle nested array structure
-                                            const specs = errorDataObj.blame_field_specs[0];
-                                            if (Array.isArray(specs)) {
-                                                return specs.filter(Boolean).join("; ");
-                                            } else if (typeof specs === 'string') {
-                                                return specs;
-                                            }
-                                        }
-                                    }
-                                } catch (e) {
-                                    debugLog("Error extracting blame_field_specs", e);
-                                }
-                                
-                                // Fall back to standard error message if available
-                                if (errorData.apiError && errorData.apiError.message) {
-                                    return errorData.apiError.message;
-                                }
-                                
-                                // If we have error details as an array, join them
-                                if (errorData.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
-                                    return errorData.details.join("; ");
-                                }
-                                
-                                // No better message found
-                                return null;
-                            };
-                            
-                            // Find the best error message
-                            const bestMessage = extractBestErrorMessage(data);
-                            if (bestMessage) {
-                                errorMessage = bestMessage;
-                            }
-                            
-                            debugLog("Selected error message", errorMessage);
-                            
-                            // Get the original error from the nested structure if possible
-                            const originalErrorDetails = data.apiError?.details?.error || data.apiError;
+                            showStatus('Error: ' + errorMessage, true);
                             
                             // Create a detailed error object for the verification page
                             const fullErrorData = {
@@ -414,19 +367,34 @@ class CallbackHandler(BaseHTTPRequestHandler):
                             
                             // Redirect to verification page with detailed error information
                             const errorParams = new URLSearchParams({
-                                adset_id: '""" + adset_id + """',
                                 token: '""" + token + """',
                                 error: errorMessage,
                                 errorData: encodedErrorData
                             });
+                            
+                            // Add the appropriate ID parameter based on object type
+                            if (isAd) {
+                                errorParams.append('ad_id', objectId);
+                            } else {
+                                errorParams.append('adset_id', objectId);
+                            }
+                            
                             window.location.href = '/verify-update?' + errorParams;
                         } else {
                             showStatus('Changes approved and will be applied shortly!');
                             setTimeout(() => {
-                                window.location.href = '/verify-update?' + new URLSearchParams({
-                                    adset_id: '""" + adset_id + """',
+                                const verifyParams = new URLSearchParams({
                                     token: '""" + token + """'
                                 });
+                                
+                                // Add the appropriate ID parameter based on object type
+                                if (isAd) {
+                                    verifyParams.append('ad_id', objectId);
+                                } else {
+                                    verifyParams.append('adset_id', objectId);
+                                }
+                                
+                                window.location.href = '/verify-update?' + verifyParams;
                             }, 3000);
                         }
                     })
@@ -440,10 +408,23 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 function cancelChanges() {
                     showStatus("Cancelling update...");
                     
-                    fetch('/update-confirm?' + new URLSearchParams({
-                        adset_id: '""" + adset_id + """',
+                    // Determine which object type we're updating
+                    const isAd = Boolean('""" + ad_id + """'); 
+                    const objectId = '""" + object_id + """';
+                    
+                    // Create parameters
+                    const params = new URLSearchParams({
                         action: 'cancel'
-                    }))
+                    });
+                    
+                    // Add the appropriate ID parameter based on object type
+                    if (isAd) {
+                        params.append('ad_id', objectId);
+                    } else {
+                        params.append('adset_id', objectId);
+                    }
+                    
+                    fetch('/update-confirm?' + params)
                     .then(() => {
                         showStatus('Update cancelled.');
                         setTimeout(() => window.close(), 2000);
@@ -467,20 +448,26 @@ class CallbackHandler(BaseHTTPRequestHandler):
         
         if action == "approve":
             adset_id = query.get("adset_id", [""])[0]
+            ad_id = query.get("ad_id", [""])[0]
             token = query.get("token", [""])[0]
             changes = query.get("changes", ["{}"])[0]
+            
+            # Determine what type of object we're updating
+            object_id = ad_id if ad_id else adset_id
+            object_type = "ad" if ad_id else "adset"
             
             # Store the approval in the global variable for the main thread to process
             update_confirmation.clear()
             update_confirmation.update({
                 "approved": True,
-                "adset_id": adset_id,
+                "object_id": object_id,
+                "object_type": object_type,
                 "token": token,
                 "changes": changes
             })
             
             # Process the update asynchronously
-            result = asyncio.run(self._perform_update(adset_id, token, changes))
+            result = asyncio.run(self._perform_update(object_id, token, changes))
             self.wfile.write(json.dumps(result).encode())
         else:
             # Store the cancellation
@@ -488,8 +475,8 @@ class CallbackHandler(BaseHTTPRequestHandler):
             update_confirmation.update({"approved": False})
             self.wfile.write(json.dumps({"status": "cancelled"}).encode())
     
-    async def _perform_update(self, adset_id, token, changes):
-        """Perform the actual update of the adset"""
+    async def _perform_update(self, object_id, token, changes):
+        """Perform the actual update of the adset or ad"""
         from .api import make_api_request
         
         try:
@@ -522,7 +509,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 # If we got here, we couldn't parse the JSON
                 return {"status": "error", "error": f"Failed to decode changes JSON: {changes}"}
             
-            endpoint = f"{adset_id}"
+            endpoint = f"{object_id}"
             
             # Create API parameters properly
             api_params = {}
@@ -535,10 +522,11 @@ class CallbackHandler(BaseHTTPRequestHandler):
             api_params["access_token"] = token
             
             # Log what we're about to send
-            logger.info(f"Sending update to Meta API for ad set {adset_id}")
+            object_type = "ad set" if object_id.startswith("23") else "ad"  # Simple heuristic based on ID prefix
+            logger.info(f"Sending update to Meta API for {object_type} {object_id}")
             logger.info(f"Parameters: {json.dumps(api_params)}")
             
-            # Make the API request to update the ad set
+            # Make the API request to update the object
             result = await make_api_request(endpoint, token, api_params, method="POST")
             
             # Log the result
@@ -624,6 +612,17 @@ class CallbackHandler(BaseHTTPRequestHandler):
         # of an update, I'll skip most of the implementation for brevity
         query = parse_qs(urlparse(self.path).query)
         adset_id = query.get("adset_id", [""])[0]
+        ad_id = query.get("ad_id", [""])[0]
+        object_id = query.get("object_id", [""])[0] 
+        
+        # For backward compatibility - use object_id if available, otherwise check for adset_id or ad_id
+        if not object_id:
+            object_id = ad_id if ad_id else adset_id
+            
+        object_type = query.get("object_type", [""])[0]
+        if not object_type:
+            object_type = "Ad" if ad_id else "Ad Set"
+            
         token = query.get("token", [""])[0]
         error_message = query.get("error", [""])[0]
         error_data_encoded = query.get("errorData", [""])[0]
@@ -635,7 +634,7 @@ class CallbackHandler(BaseHTTPRequestHandler):
         
         # The full HTML for verification would be here
         # For brevity, sending a simple placeholder
-        self.wfile.write(f"<html><body><h1>Verifying update for adset {adset_id}</h1></body></html>".encode('utf-8'))
+        self.wfile.write(f"<html><body><h1>Verifying update for {object_type.lower()} {object_id}</h1></body></html>".encode('utf-8'))
     
     def _handle_adset_api(self):
         """Handle API requests for adset data"""

@@ -363,4 +363,64 @@ async def get_ad_image(access_token: str = None, ad_id: str = None) -> Image:
         return Image(data=img_bytes, format="jpeg")
         
     except Exception as e:
-        return f"Error processing image: {str(e)}" 
+        return f"Error processing image: {str(e)}"
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def update_ad(ad_id: str, status: str = None, bid_amount: int = None, access_token: str = None) -> str:
+    """
+    Update an ad with new settings.
+    
+    Args:
+        ad_id: Meta Ads ad ID
+        status: Update ad status (ACTIVE, PAUSED, etc.)
+        bid_amount: Bid amount in account currency (in cents for USD)
+        access_token: Meta API access token (optional - will use cached token if not provided)
+    """
+    if not ad_id:
+        return json.dumps({"error": "No ad ID provided"}, indent=2)
+    
+    changes = {}
+    
+    if status is not None:
+        changes['status'] = status
+        
+    if bid_amount is not None:
+        changes['bid_amount'] = bid_amount
+    
+    if not changes:
+        return json.dumps({"error": "No update parameters provided"}, indent=2)
+    
+    # Get current ad details for comparison
+    current_details_json = await get_ad_details(ad_id=ad_id, access_token=access_token)
+    current_details = json.loads(current_details_json)
+    
+    # Import the callback server components
+    from .callback_server import start_callback_server, update_confirmation
+    import urllib.parse
+    
+    # Start the callback server if not already running
+    port = start_callback_server()
+    
+    # Generate confirmation URL with properly encoded parameters
+    changes_json = json.dumps(changes)
+    encoded_changes = urllib.parse.quote(changes_json)
+    confirmation_url = f"http://localhost:{port}/confirm-update?ad_id={ad_id}&token={access_token}&changes={encoded_changes}"
+    
+    # Reset the update confirmation
+    update_confirmation.clear()
+    update_confirmation.update({"approved": False})
+    
+    # Return the confirmation link
+    response = {
+        "message": "Please confirm the ad update",
+        "confirmation_url": confirmation_url,
+        "markdown_link": f"[Click here to confirm ad update]({confirmation_url})",
+        "current_details": current_details,
+        "proposed_changes": changes,
+        "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",
+        "note": "After authenticating, the token will be automatically saved and your ad will be updated. Refresh the browser page if it doesn't load immediately."
+    }
+    
+    return json.dumps(response, indent=2) 
