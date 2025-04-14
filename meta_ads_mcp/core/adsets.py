@@ -163,7 +163,7 @@ async def update_adset(adset_id: str, frequency_control_specs: List[Dict[str, An
         "current_details": current_details,
         "proposed_changes": changes,
         "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",
-        "note": "After authenticating, the token will be automatically saved and your ad set will be updated. Refresh the browser page if it doesn't load immediately."
+        "note": "Click the link to confirm and apply your ad set updates. Refresh the browser page if it doesn't load immediately."
     }
     
     return json.dumps(response, indent=2) 
