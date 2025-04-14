@@ -44,6 +44,8 @@ class CallbackHandler(BaseHTTPRequestHandler):
                 self._handle_update_verification()
             elif self.path.startswith("/api/adset"):
                 self._handle_adset_api()
+            elif self.path.startswith("/api/ad"):
+                self._handle_ad_api()
             else:
                 # If no matching path, return a 404 error
                 self.send_response(404)
@@ -607,9 +609,6 @@ class CallbackHandler(BaseHTTPRequestHandler):
     
     def _handle_update_verification(self):
         """Handle the verification page for updates"""
-        # Implementation for update verification page
-        # This would be a long HTML response with JavaScript to check the status
-        # of an update, I'll skip most of the implementation for brevity
         query = parse_qs(urlparse(self.path).query)
         adset_id = query.get("adset_id", [""])[0]
         ad_id = query.get("ad_id", [""])[0]
@@ -627,14 +626,171 @@ class CallbackHandler(BaseHTTPRequestHandler):
         error_message = query.get("error", [""])[0]
         error_data_encoded = query.get("errorData", [""])[0]
         
-        # Respond with verification page (HTML generation would go here)
+        # Respond with verification page
         self.send_response(200)
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
         
-        # The full HTML for verification would be here
-        # For brevity, sending a simple placeholder
-        self.wfile.write(f"<html><body><h1>Verifying update for {object_type.lower()} {object_id}</h1></body></html>".encode('utf-8'))
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Verification - """ + object_type + """ Update</title>
+            <meta charset="utf-8">
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    margin: 20px; 
+                    max-width: 1000px; 
+                    margin: 0 auto;
+                    line-height: 1.6;
+                }
+                .header { 
+                    margin-bottom: 20px; 
+                    padding-bottom: 10px; 
+                    border-bottom: 1px solid #ccc; 
+                }
+                .success { 
+                    color: #2ea44f; 
+                    background-color: #e6ffed; 
+                    padding: 15px; 
+                    border-radius: 6px; 
+                    margin: 20px 0; 
+                }
+                .error { 
+                    color: #d73a49; 
+                    background-color: #ffeef0; 
+                    padding: 15px; 
+                    border-radius: 6px; 
+                    margin: 20px 0; 
+                }
+                .details { 
+                    background: #f6f8fa; 
+                    padding: 15px; 
+                    border-radius: 6px; 
+                    margin: 20px 0; 
+                }
+                .btn {
+                    display: inline-block;
+                    padding: 10px 20px;
+                    background-color: #0366d6;
+                    color: white;
+                    border-radius: 6px;
+                    text-decoration: none;
+                    margin-top: 20px;
+                }
+                pre {
+                    white-space: pre-wrap;
+                    word-break: break-word;
+                    background: #f8f8f8;
+                    padding: 10px;
+                    border-radius: 4px;
+                    overflow: auto;
+                }
+                #currentDetails {
+                    display: none;
+                    margin-top: 20px;
+                }
+                .toggle-btn {
+                    background-color: #f1f8ff;
+                    border: 1px solid #c8e1ff;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-top: 20px;
+                    display: inline-block;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h1>""" + object_type + """ Update Verification</h1>
+                <p>Object ID: <strong>""" + object_id + """</strong></p>
+            </div>
+        """
+        
+        # If there's an error message, display it
+        if error_message:
+            html += """
+            <div class="error">
+                <h3>❌ Update Failed</h3>
+                <p><strong>Error:</strong> """ + error_message + """</p>
+            """
+            
+            # If there's detailed error data, decode and display it
+            if error_data_encoded:
+                try:
+                    error_data = json.loads(urllib.parse.unquote(error_data_encoded))
+                    html += """
+                    <div class="details">
+                        <h4>Error Details:</h4>
+                        <pre>""" + json.dumps(error_data, indent=2) + """</pre>
+                    </div>
+                    """
+                except:
+                    pass
+            
+            html += """</div>"""
+        else:
+            # No error, display success message
+            html += """
+            <div class="success">
+                <h3>✅ Update Successful</h3>
+                <p>Your """ + object_type.lower() + """ has been updated successfully.</p>
+            </div>
+            """
+        
+        # Add JavaScript to fetch the current details of the ad/adset
+        html += """
+        <button class="toggle-btn" id="toggleDetails">Show Current Details</button>
+        <div id="currentDetails">
+            <h3>Current """ + object_type + """ Details:</h3>
+            <pre id="detailsJson">Loading...</pre>
+        </div>
+        
+        <a href="#" class="btn" onclick="window.close()">Close Window</a>
+        
+        <script>
+            document.getElementById('toggleDetails').addEventListener('click', function() {
+                const detailsDiv = document.getElementById('currentDetails');
+                const toggleBtn = document.getElementById('toggleDetails');
+                
+                if (detailsDiv.style.display === 'block') {
+                    detailsDiv.style.display = 'none';
+                    toggleBtn.textContent = 'Show Current Details';
+                } else {
+                    detailsDiv.style.display = 'block';
+                    toggleBtn.textContent = 'Hide Current Details';
+                    
+                    // Fetch current details if not already loaded
+                    if (document.getElementById('detailsJson').textContent === 'Loading...') {
+                        fetchCurrentDetails();
+                    }
+                }
+            });
+            
+            function fetchCurrentDetails() {
+                const objectId = '""" + object_id + """';
+                const objectType = '""" + object_type.lower() + """';
+                const endpoint = objectType === 'ad' ? 
+                    `/api/ad?ad_id=${objectId}&token=""" + token + """` : 
+                    `/api/adset?adset_id=${objectId}&token=""" + token + """`;
+                
+                fetch(endpoint)
+                    .then(response => response.json())
+                    .then(data => {
+                        document.getElementById('detailsJson').textContent = JSON.stringify(data, null, 2);
+                    })
+                    .catch(error => {
+                        document.getElementById('detailsJson').textContent = `Error fetching details: ${error}`;
+                    });
+            }
+        </script>
+        </body>
+        </html>
+        """
+        
+        self.wfile.write(html.encode('utf-8'))
     
     def _handle_adset_api(self):
         """Handle API requests for adset data"""
@@ -685,6 +841,36 @@ class CallbackHandler(BaseHTTPRequestHandler):
         self.send_header("Content-type", "application/json")
         self.end_headers()
         self.wfile.write(json.dumps(result, indent=2).encode())
+    
+    def _handle_ad_api(self):
+        """Handle API requests for ad data"""
+        # Parse query parameters
+        query = parse_qs(urlparse(self.path).query)
+        ad_id = query.get("ad_id", [""])[0]
+        token = query.get("token", [""])[0]
+        
+        from .api import make_api_request
+        
+        # Call the Graph API directly
+        async def get_ad_data():
+            endpoint = f"{ad_id}"
+            params = {
+                "fields": "id,name,adset_id,campaign_id,status,creative,created_time,updated_time,bid_amount,conversion_domain,tracking_specs,preview_shareable_link"
+            }
+            return await make_api_request(endpoint, token, params)
+        
+        # Run the async function to get data
+        result = asyncio.run(get_ad_data())
+        
+        # Send the response
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+        
+        if isinstance(result, dict):
+            self.wfile.write(json.dumps(result, indent=2).encode())
+        else:
+            self.wfile.write(json.dumps({"error": "Failed to get ad data"}, indent=2).encode())
     
     # Silence server logs
     def log_message(self, format, *args):
