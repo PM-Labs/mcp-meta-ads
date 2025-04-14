@@ -607,41 +607,67 @@ class CallbackHandler(BaseHTTPRequestHandler):
                                     // Build a properly encoded and detailed error message
                                     let errorMessage = data.error || "Unknown error";
                                     
-                                    // Include any detailed errors if available
-                                    if (data.errorDetails && data.errorDetails.length > 0) {
-                                        errorMessage = data.errorDetails.join("; ");
-                                    }
-                                    
-                                    // If we have an API error object, use its information
-                                    if (data.apiError) {
-                                        if (data.apiError.error_user_msg) {
-                                            errorMessage = data.apiError.error_user_msg;
-                                        } else if (data.apiError.message) {
-                                            errorMessage = data.apiError.message;
+                                    // Extract the most appropriate error message for display
+                                    const extractBestErrorMessage = (errorData) => {
+                                        // Try to find the most user-friendly message in the error data
+                                        if (!errorData) return null;
+                                        
+                                        // Meta often puts the most user-friendly message in error_user_msg
+                                        if (errorData.apiError && errorData.apiError.error_user_msg) {
+                                            return errorData.apiError.error_user_msg;
                                         }
                                         
-                                        if (data.apiError.error_data) {
-                                            try {
-                                                const errorData = JSON.parse(data.apiError.error_data);
-                                                if (errorData.blame_field_specs && errorData.blame_field_specs.length > 0) {
-                                                    if (Array.isArray(errorData.blame_field_specs[0])) {
-                                                        const specs = errorData.blame_field_specs[0].filter(Boolean);
-                                                        if (specs.length > 0) {
-                                                            errorMessage = specs.join("; ");
-                                                        }
+                                        // Look for detailed error messages in blame_field_specs
+                                        try {
+                                            if (errorData.apiError && errorData.apiError.error_data) {
+                                                const errorDataObj = typeof errorData.apiError.error_data === 'string' 
+                                                    ? JSON.parse(errorData.apiError.error_data) 
+                                                    : errorData.apiError.error_data;
+                                                
+                                                if (errorDataObj.blame_field_specs && errorDataObj.blame_field_specs.length > 0) {
+                                                    // Handle nested array structure
+                                                    const specs = errorDataObj.blame_field_specs[0];
+                                                    if (Array.isArray(specs)) {
+                                                        return specs.filter(Boolean).join("; ");
+                                                    } else if (typeof specs === 'string') {
+                                                        return specs;
                                                     }
                                                 }
-                                            } catch (e) {
-                                                debugLog("Error parsing error_data", e);
                                             }
+                                        } catch (e) {
+                                            debugLog("Error extracting blame_field_specs", e);
                                         }
+                                        
+                                        // Fall back to standard error message if available
+                                        if (errorData.apiError && errorData.apiError.message) {
+                                            return errorData.apiError.message;
+                                        }
+                                        
+                                        // If we have error details as an array, join them
+                                        if (errorData.details && Array.isArray(errorData.details) && errorData.details.length > 0) {
+                                            return errorData.details.join("; ");
+                                        }
+                                        
+                                        // No better message found
+                                        return null;
+                                    };
+                                    
+                                    // Find the best error message
+                                    const bestMessage = extractBestErrorMessage(data);
+                                    if (bestMessage) {
+                                        errorMessage = bestMessage;
                                     }
+                                    
+                                    debugLog("Selected error message", errorMessage);
+                                    
+                                    // Get the original error from the nested structure if possible
+                                    const originalErrorDetails = data.apiError?.details?.error || data.apiError;
                                     
                                     // Create a detailed error object for the verification page
                                     const fullErrorData = {
                                         message: errorMessage,
                                         details: data.errorDetails || [],
-                                        apiError: data.apiError || {},
+                                        apiError: originalErrorDetails || data.apiError || {},
                                         fullResponse: data.fullResponse || {}
                                     };
                                     
@@ -871,6 +897,24 @@ class CallbackHandler(BaseHTTPRequestHandler):
                                 if (errorData) {
                                     errorHtml += `<div class="error-details">`;
                                     
+                                    // If we have a nice error title from Meta, display it
+                                    if (errorData.apiError && errorData.apiError.error_user_title) {
+                                        errorHtml += `<strong>Error Type:</strong> ${errorData.apiError.error_user_title}<br>`;
+                                    }
+                                    
+                                    // Add error codes if available
+                                    if (errorData.apiError) {
+                                        const apiError = errorData.apiError;
+                                        if (apiError.code) {
+                                            errorHtml += `<strong>Error Code:</strong> ${apiError.code}`;
+                                            if (apiError.error_subcode) {
+                                                errorHtml += ` (Subcode: ${apiError.error_subcode})`;
+                                            }
+                                            errorHtml += `<br>`;
+                                        }
+                                    }
+                                    
+                                    // Add detailed error list
                                     if (errorData.details && errorData.details.length > 0) {
                                         errorHtml += `
                                             <strong>Error Details:</strong>
@@ -880,19 +924,34 @@ class CallbackHandler(BaseHTTPRequestHandler):
                                         `;
                                     }
                                     
-                                    if (errorData.apiError) {
-                                        const apiError = errorData.apiError;
-                                        if (apiError.error_user_title) {
-                                            errorHtml += `<div><strong>Error Type:</strong> ${apiError.error_user_title}</div>`;
+                                    // Try to extract and display blame_field_specs
+                                    try {
+                                        if (errorData.apiError && errorData.apiError.error_data) {
+                                            const error_data = typeof errorData.apiError.error_data === 'string' 
+                                                ? JSON.parse(errorData.apiError.error_data) 
+                                                : errorData.apiError.error_data;
+                                                
+                                            if (error_data.blame_field_specs && error_data.blame_field_specs.length > 0) {
+                                                errorHtml += `<strong>Field-Specific Errors:</strong><ul class="error-list">`;
+                                                
+                                                // Handle different formats of blame_field_specs
+                                                if (Array.isArray(error_data.blame_field_specs[0])) {
+                                                    // Format: [[error1, error2, ...]]
+                                                    error_data.blame_field_specs[0].forEach(spec => {
+                                                        if (spec) errorHtml += `<li>${spec}</li>`;
+                                                    });
+                                                } else {
+                                                    // Format: [error1, error2, ...]
+                                                    error_data.blame_field_specs.forEach(spec => {
+                                                        if (spec) errorHtml += `<li>${spec}</li>`;
+                                                    });
+                                                }
+                                                
+                                                errorHtml += `</ul>`;
+                                            }
                                         }
-                                        
-                                        if (apiError.code) {
-                                            errorHtml += `<div><strong>Error Code:</strong> ${apiError.code}</div>`;
-                                        }
-                                        
-                                        if (apiError.error_subcode) {
-                                            errorHtml += `<div><strong>Error Subcode:</strong> ${apiError.error_subcode}</div>`;
-                                        }
+                                    } catch (e) {
+                                        debugLog('Error parsing blame_field_specs', e);
                                     }
                                     
                                     errorHtml += `</div>`;
