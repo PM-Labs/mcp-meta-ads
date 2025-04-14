@@ -166,7 +166,28 @@ Add this to your `claude_desktop_config.json` to integrate with Claude in Cursor
       - `ad_id`: Meta Ads ad ID
     - Returns: The ad image ready for direct visual analysis
 
-12. `mcp_meta_ads_get_insights`
+12. `mcp_meta_ads_update_ad`
+    - Update an ad with new settings
+    - Inputs:
+      - `ad_id`: Meta Ads ad ID
+      - `status`: Update ad status (ACTIVE, PAUSED, etc.)
+      - `bid_amount`: Bid amount in account currency (in cents for USD)
+      - `access_token` (optional): Meta API access token (will use cached token if not provided)
+    - Returns: Confirmation with updated ad details and a confirmation link
+
+13. `mcp_meta_ads_update_adset`
+    - Update an ad set with new settings including frequency caps
+    - Inputs:
+      - `adset_id`: Meta Ads ad set ID
+      - `frequency_control_specs`: List of frequency control specifications
+      - `bid_strategy`: Bid strategy (e.g., 'LOWEST_COST_WITH_BID_CAP')
+      - `bid_amount`: Bid amount in account currency (in cents for USD)
+      - `status`: Update ad set status (ACTIVE, PAUSED, etc.)
+      - `targeting`: Targeting specifications including targeting_automation
+      - `access_token` (optional): Meta API access token (will use cached token if not provided)
+    - Returns: Confirmation with updated ad set details and a confirmation link
+
+14. `mcp_meta_ads_get_insights`
     - Get performance insights for a campaign, ad set, ad or account
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -176,7 +197,7 @@ Add this to your `claude_desktop_config.json` to integrate with Claude in Cursor
       - `level`: Level of aggregation (ad, adset, campaign, account)
     - Returns: Performance metrics for the specified object
 
-13. `mcp_meta_ads_debug_image_download`
+15. `mcp_meta_ads_debug_image_download`
     - Debug image download issues and report detailed diagnostics
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -184,7 +205,7 @@ Add this to your `claude_desktop_config.json` to integrate with Claude in Cursor
       - `ad_id`: Meta Ads ad ID (optional, used if url is not provided)
     - Returns: Diagnostic information about image download attempts
 
-14. `mcp_meta_ads_get_login_link`
+16. `mcp_meta_ads_get_login_link`
     - Get a clickable login link for Meta Ads authentication
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
