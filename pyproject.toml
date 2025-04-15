@@ -25,6 +25,7 @@ dependencies = [
     "requests>=2.32.3",
     "Pillow>=10.0.0",
     "pathlib>=1.0.1",
+    "python-dateutil>=2.8.2",
 ]
 
 [project.urls]

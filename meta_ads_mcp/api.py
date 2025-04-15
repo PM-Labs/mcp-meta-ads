@@ -521,45 +521,40 @@ def meta_api_tool(func):
         if not access_token:
             needs_authentication = True
             
-            # Start the callback server
-            port = start_callback_server()
+            # Check if we're using Pipeboard authentication
+            using_pipeboard = bool(os.environ.get("PIPEBOARD_API_TOKEN", ""))
             
-            # Get current app ID from config
-            current_app_id = meta_config.get_app_id()
-            if not current_app_id:
-                return json.dumps({
-                    "error": "No Meta App ID provided. Please provide a valid app ID via environment variable META_APP_ID or --app-id CLI argument.",
-                    "help": "This is required for authentication with Meta Graph API."
-                }, indent=2)
-                
-            # Update auth manager with current app ID
-            auth_manager.app_id = current_app_id
-            print(f"Using Meta App ID from config: {current_app_id}")
-            
-            # Update auth manager's redirect URI with the current port
-            auth_manager.redirect_uri = f"http://localhost:{port}/callback"
-            
-            # Generate the authentication URL
-            login_url = auth_manager.get_auth_url()
-            
-            # Return a user-friendly authentication required response
-            return json.dumps({
-                "error": "Authentication Required",
-                "details": {
-                    "message": "You need to authenticate with the Meta API before using this tool",
-                    "action_required": "Please authenticate using the link below",
-                    "login_url": login_url,
-                    "markdown_link": f"[Click here to authenticate with Meta Ads API]({login_url})"
-                }
-            }, indent=2)
-        
-        # Call the original function
-        try:
-            result = await func(**kwargs)
-            
-            # If authentication is needed after the call (e.g., token was invalidated)
-            if needs_authentication:
-                # Start the callback server
+            if using_pipeboard:
+                # For Pipeboard, we use a different authentication flow
+                try:
+                    # Here we'd import dynamically to avoid circular imports
+                    from .core.pipeboard_auth import pipeboard_auth_manager
+                    
+                    # Initiate the Pipeboard auth flow
+                    auth_data = pipeboard_auth_manager.initiate_auth_flow()
+                    login_url = auth_data.get("loginUrl")
+                    
+                    # Return a user-friendly authentication required response for Pipeboard
+                    return json.dumps({
+                        "error": "Authentication Required",
+                        "details": {
+                            "message": "You need to authenticate with the Meta API via Pipeboard",
+                            "action_required": "Please authenticate using the link below",
+                            "login_url": login_url,
+                            "markdown_link": f"[Click here to authenticate with Meta Ads API via Pipeboard]({login_url})",
+                            "authentication_method": "pipeboard"
+                        }
+                    }, indent=2)
+                except Exception as e:
+                    return json.dumps({
+                        "error": f"Pipeboard Authentication Error: {str(e)}",
+                        "details": {
+                            "message": "Failed to initiate Pipeboard authentication flow",
+                            "action_required": "Please check your PIPEBOARD_API_TOKEN environment variable"
+                        }
+                    }, indent=2)
+            else:
+                # For direct Meta auth, start the callback server
                 port = start_callback_server()
                 
                 # Get current app ID from config
@@ -570,6 +565,7 @@ def meta_api_tool(func):
                         "help": "This is required for authentication with Meta Graph API."
                     }, indent=2)
                     
+                # Update auth manager with current app ID
                 auth_manager.app_id = current_app_id
                 print(f"Using Meta App ID from config: {current_app_id}")
                 
@@ -579,21 +575,94 @@ def meta_api_tool(func):
                 # Generate the authentication URL
                 login_url = auth_manager.get_auth_url()
                 
-                # Create a resource response that includes the markdown link format
-                response = {
-                    "error": "Session expired or token invalid. Please re-authenticate with Meta Ads API",
-                    "login_url": login_url,
-                    "server_status": f"Callback server running on port {port}",
-                    "markdown_link": f"[Click here to re-authenticate with Meta Ads API]({login_url})",
-                    "message": "IMPORTANT: Please use the Markdown link format in your response to allow the user to click it.",
-                    "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",
-                    "note": "After authenticating, the token will be automatically saved."
-                }
+                # Return a user-friendly authentication required response
+                return json.dumps({
+                    "error": "Authentication Required",
+                    "details": {
+                        "message": "You need to authenticate with the Meta API before using this tool",
+                        "action_required": "Please authenticate using the link below",
+                        "login_url": login_url,
+                        "markdown_link": f"[Click here to authenticate with Meta Ads API]({login_url})",
+                        "authentication_method": "meta_oauth"
+                    }
+                }, indent=2)
+        
+        # Call the original function
+        try:
+            result = await func(**kwargs)
+            
+            # If authentication is needed after the call (e.g., token was invalidated)
+            if needs_authentication:
+                # Check if we're using Pipeboard authentication
+                using_pipeboard = bool(os.environ.get("PIPEBOARD_API_TOKEN", ""))
                 
-                # Wait a moment to ensure the server is fully started
-                await asyncio.sleep(1)
-                
-                return json.dumps(response, indent=2)
+                if using_pipeboard:
+                    # For Pipeboard, we use a different authentication flow
+                    try:
+                        # Here we'd import dynamically to avoid circular imports
+                        from .core.pipeboard_auth import pipeboard_auth_manager
+                        
+                        # Initiate the Pipeboard auth flow
+                        auth_data = pipeboard_auth_manager.initiate_auth_flow()
+                        login_url = auth_data.get("loginUrl")
+                        
+                        # Create a resource response that includes the markdown link format
+                        response = {
+                            "error": "Session expired or token invalid. Please re-authenticate with Meta Ads API",
+                            "login_url": login_url,
+                            "markdown_link": f"[Click here to re-authenticate with Meta Ads API via Pipeboard]({login_url})",
+                            "message": "IMPORTANT: Please use the Markdown link format in your response to allow the user to click it.",
+                            "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",
+                            "authentication_method": "pipeboard",
+                            "note": "After authenticating, the token will be automatically saved."
+                        }
+                        
+                        return json.dumps(response, indent=2)
+                    except Exception as e:
+                        return json.dumps({
+                            "error": f"Pipeboard Authentication Error: {str(e)}",
+                            "details": {
+                                "message": "Failed to initiate Pipeboard authentication flow",
+                                "action_required": "Please check your PIPEBOARD_API_TOKEN environment variable"
+                            }
+                        }, indent=2)
+                else:
+                    # For direct Meta auth, start the callback server
+                    port = start_callback_server()
+                    
+                    # Get current app ID from config
+                    current_app_id = meta_config.get_app_id()
+                    if not current_app_id:
+                        return json.dumps({
+                            "error": "No Meta App ID provided. Please provide a valid app ID via environment variable META_APP_ID or --app-id CLI argument.",
+                            "help": "This is required for authentication with Meta Graph API."
+                        }, indent=2)
+                        
+                    auth_manager.app_id = current_app_id
+                    print(f"Using Meta App ID from config: {current_app_id}")
+                    
+                    # Update auth manager's redirect URI with the current port
+                    auth_manager.redirect_uri = f"http://localhost:{port}/callback"
+                    
+                    # Generate the authentication URL
+                    login_url = auth_manager.get_auth_url()
+                    
+                    # Create a resource response that includes the markdown link format
+                    response = {
+                        "error": "Session expired or token invalid. Please re-authenticate with Meta Ads API",
+                        "login_url": login_url,
+                        "server_status": f"Callback server running on port {port}",
+                        "markdown_link": f"[Click here to re-authenticate with Meta Ads API]({login_url})",
+                        "message": "IMPORTANT: Please use the Markdown link format in your response to allow the user to click it.",
+                        "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",
+                        "authentication_method": "meta_oauth",
+                        "note": "After authenticating, the token will be automatically saved."
+                    }
+                    
+                    # Wait a moment to ensure the server is fully started
+                    await asyncio.sleep(1)
+                    
+                    return json.dumps(response, indent=2)
             
             # If result is a string (JSON), check for app ID errors and improve them
             if isinstance(result, str):

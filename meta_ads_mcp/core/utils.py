@@ -17,11 +17,16 @@ import platform
 META_APP_ID = os.environ.get("META_APP_ID", "")
 META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
 
-# Print warning if Meta app credentials are not configured
-if not META_APP_ID:
-    print("WARNING: META_APP_ID environment variable is not set. Authentication will not work properly.")
-if not META_APP_SECRET:
-    print("WARNING: META_APP_SECRET environment variable is not set. Long-lived token exchange will not work.")
+# Only show warnings about Meta credentials if we're not using Pipeboard
+# Check for Pipeboard token in environment
+using_pipeboard = bool(os.environ.get("PIPEBOARD_API_TOKEN", ""))
+
+# Print warning if Meta app credentials are not configured and not using Pipeboard
+if not using_pipeboard:
+    if not META_APP_ID:
+        print("WARNING: META_APP_ID environment variable is not set. Authentication will not work properly.")
+    if not META_APP_SECRET:
+        print("WARNING: META_APP_SECRET environment variable is not set. Long-lived token exchange will not work.")
 
 # Configure logging to file
 def setup_logging():
@@ -55,6 +60,7 @@ def setup_logging():
     # Log startup information
     logger.info(f"Logging initialized. Log file: {log_file}")
     logger.info(f"Platform: {platform.system()} {platform.release()}")
+    logger.info(f"Using Pipeboard authentication: {using_pipeboard}")
     
     return logger
 

@@ -18,6 +18,9 @@ from .callback_server import (
     update_confirmation
 )
 
+# Import the new Pipeboard authentication
+from .pipeboard_auth import pipeboard_auth_manager
+
 # Auth constants
 AUTH_SCOPE = "ads_management,ads_read,business_management"
 AUTH_REDIRECT_URI = "http://localhost:8888/callback"
@@ -123,7 +126,10 @@ class AuthManager:
         self.app_id = app_id
         self.redirect_uri = redirect_uri
         self.token_info = None
-        self._load_cached_token()
+        # Check for Pipeboard token first
+        self.use_pipeboard = bool(os.environ.get("PIPEBOARD_API_TOKEN", ""))
+        if not self.use_pipeboard:
+            self._load_cached_token()
     
     def _get_token_cache_path(self) -> pathlib.Path:
         """Get the platform-specific path for token cache file"""
@@ -154,14 +160,14 @@ class AuthManager:
                 
                 # Check if token is expired
                 if self.token_info.is_expired():
-                    print("Cached token is expired")
+                    logger.info("Cached token is expired")
                     self.token_info = None
                     return False
                 
-                print(f"Loaded cached token (expires in {(self.token_info.created_at + self.token_info.expires_in) - int(time.time())} seconds)")
+                logger.info(f"Loaded cached token (expires in {(self.token_info.created_at + self.token_info.expires_in) - int(time.time())} seconds)")
                 return True
         except Exception as e:
-            print(f"Error loading cached token: {e}")
+            logger.error(f"Error loading cached token: {e}")
             return False
     
     def _save_token_to_cache(self) -> None:
@@ -174,9 +180,9 @@ class AuthManager:
         try:
             with open(cache_path, "w") as f:
                 json.dump(self.token_info.serialize(), f)
-            print(f"Token cached at: {cache_path}")
+            logger.info(f"Token cached at: {cache_path}")
         except Exception as e:
-            print(f"Error saving token to cache: {e}")
+            logger.error(f"Error saving token to cache: {e}")
     
     def get_auth_url(self) -> str:
         """Generate the Facebook OAuth URL for desktop app flow"""
@@ -198,6 +204,12 @@ class AuthManager:
         Returns:
             Access token if successful, None otherwise
         """
+        # If Pipeboard auth is available, use that instead
+        if self.use_pipeboard:
+            logger.info("Using Pipeboard authentication")
+            return pipeboard_auth_manager.get_access_token(force_refresh=force_refresh)
+        
+        # Otherwise, use the original OAuth flow
         # Check if we already have a valid token
         if not force_refresh and self.token_info and not self.token_info.is_expired():
             return self.token_info.access_token
@@ -212,7 +224,7 @@ class AuthManager:
         auth_url = self.get_auth_url()
         
         # Open browser with auth URL
-        print(f"Opening browser with URL: {auth_url}")
+        logger.info(f"Opening browser with URL: {auth_url}")
         webbrowser.open(auth_url)
         
         # We don't wait for the token here anymore
@@ -227,6 +239,10 @@ class AuthManager:
         Returns:
             Access token if available, None otherwise
         """
+        # If using Pipeboard, always delegate to the Pipeboard auth manager
+        if self.use_pipeboard:
+            return pipeboard_auth_manager.get_access_token()
+            
         if not self.token_info or self.token_info.is_expired():
             return None
         
@@ -234,8 +250,13 @@ class AuthManager:
         
     def invalidate_token(self) -> None:
         """Invalidate the current token, usually because it has expired or is invalid"""
+        # If using Pipeboard, delegate to the Pipeboard auth manager
+        if self.use_pipeboard:
+            pipeboard_auth_manager.invalidate_token()
+            return
+            
         if self.token_info:
-            print(f"Invalidating token: {self.token_info.access_token[:10]}...")
+            logger.info(f"Invalidating token: {self.token_info.access_token[:10]}...")
             self.token_info = None
             
             # Signal that authentication is needed
@@ -247,12 +268,12 @@ class AuthManager:
                 cache_path = self._get_token_cache_path()
                 if cache_path.exists():
                     os.remove(cache_path)
-                    print(f"Removed cached token file: {cache_path}")
+                    logger.info(f"Removed cached token file: {cache_path}")
             except Exception as e:
-                print(f"Error removing cached token: {e}")
+                logger.error(f"Error removing cached token file: {e}")
     
     def clear_token(self) -> None:
-        """Clear the current token and remove from cache"""
+        """Alias for invalidate_token for consistency with other APIs"""
         self.invalidate_token()
 
 
@@ -443,4 +464,14 @@ def login():
 
 # Initialize auth manager with a placeholder - will be updated at runtime
 META_APP_ID = os.environ.get("META_APP_ID", "YOUR_META_APP_ID")
+
+# Only show warnings about missing META_APP_ID/META_APP_SECRET when not using Pipeboard
+if not os.environ.get("PIPEBOARD_API_TOKEN"):
+    # Log warnings about missing environment variables
+    if META_APP_ID == "YOUR_META_APP_ID":
+        logger.warning("META_APP_ID environment variable is not set. Authentication will not work properly.")
+    
+    if not os.environ.get("META_APP_SECRET"):
+        logger.warning("META_APP_SECRET environment variable is not set. Long-lived token exchange will not work.")
+
 auth_manager = AuthManager(META_APP_ID) 
