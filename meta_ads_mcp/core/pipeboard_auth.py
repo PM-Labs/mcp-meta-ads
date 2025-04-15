@@ -14,8 +14,7 @@ import logging
 logger.setLevel(logging.DEBUG)
 
 # Base URL for pipeboard API
-# Using localhost:3000/api as specified in meta_auth_test.sh
-PIPEBOARD_API_BASE = "http://localhost:3000/api"
+PIPEBOARD_API_BASE = "https://pipeboard.co/api"
 
 # Debug message about API base URL
 logger.info(f"Pipeboard API base URL: {PIPEBOARD_API_BASE}")
