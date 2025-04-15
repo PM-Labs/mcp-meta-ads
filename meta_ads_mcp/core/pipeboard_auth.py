@@ -202,9 +202,9 @@ class PipeboardAuthManager:
             logger.error("No PIPEBOARD_API_TOKEN environment variable set")
             raise ValueError("No PIPEBOARD_API_TOKEN environment variable set")
             
-        url = f"{PIPEBOARD_API_BASE}/meta/auth"
+        # Pass token as URL parameter instead of Authorization header
+        url = f"{PIPEBOARD_API_BASE}/meta/auth?api_token={self.api_token}"
         headers = {
-            "Authorization": f"Bearer {self.api_token}",
             "Content-Type": "application/json"
         }
         
@@ -262,10 +262,9 @@ class PipeboardAuthManager:
         
         # If force refresh or no token/expired token, get a new one from Pipeboard
         try:
-            # Make a request to get the token
-            url = f"{PIPEBOARD_API_BASE}/meta/token"
+            # Make a request to get the token, passing API token as URL parameter
+            url = f"{PIPEBOARD_API_BASE}/meta/token?api_token={self.api_token}"
             headers = {
-                "Authorization": f"Bearer {self.api_token}",
                 "Content-Type": "application/json"
             }
             

@@ -45,8 +45,13 @@ async def test_authentication(app_id=None, force_login=False):
         
         # Test the token by getting ad accounts
         print("\nFetching ad accounts to test token...")
-        ad_accounts_json = await get_ad_accounts(token)
-        ad_accounts = json.loads(ad_accounts_json)
+        ad_accounts_json = await get_ad_accounts(access_token=token)
+        
+        # Check if ad_accounts_json is already a dictionary or a JSON string
+        if isinstance(ad_accounts_json, dict):
+            ad_accounts = ad_accounts_json
+        else:
+            ad_accounts = json.loads(ad_accounts_json)
         
         if "error" in ad_accounts:
             print(f"Error fetching ad accounts: {ad_accounts['error']}")

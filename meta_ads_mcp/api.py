@@ -30,7 +30,7 @@ USER_AGENT = "meta-ads-mcp/1.0"
 META_APP_ID = os.environ.get("META_APP_ID", "")  # Default to empty string
 
 # Auth constants
-AUTH_SCOPE = "ads_management,ads_read,business_management"
+AUTH_SCOPE = "ads_management,ads_read,business_management,public_profile"
 AUTH_REDIRECT_URI = "http://localhost:8888/callback"
 AUTH_RESPONSE_TYPE = "token"
 

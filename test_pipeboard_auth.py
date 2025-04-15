@@ -12,6 +12,7 @@ import argparse
 import requests
 import logging
 import inspect
+import socket
 
 # Set up logging
 logging.basicConfig(
@@ -27,6 +28,44 @@ from meta_ads_mcp.api import get_ad_accounts
 # Define Meta Graph API base URL for testing access token directly
 META_GRAPH_API_VERSION = "v20.0"
 META_GRAPH_API_BASE = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}"
+
+def test_server_connectivity(server_url, port=3000):
+    """Test if the Pipeboard server is reachable and identify network issues"""
+    logger.debug(f"Testing server connectivity to {server_url}")
+    
+    # Parse the URL
+    from urllib.parse import urlparse
+    parsed_url = urlparse(server_url)
+    hostname = parsed_url.netloc.split(':')[0]
+    
+    # Test basic connectivity with socket
+    try:
+        logger.debug(f"Testing TCP connection to {hostname}:{port}")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(5)
+        s.connect((hostname, port))
+        logger.debug(f"TCP connection successful to {hostname}:{port}")
+        s.close()
+    except socket.error as e:
+        logger.error(f"Socket connection failed: {e}")
+        return False
+    
+    # Test HTTP request to server root
+    try:
+        logger.debug(f"Testing HTTP request to {server_url}")
+        response = requests.get(server_url, timeout=5)
+        logger.debug(f"HTTP GET {server_url} response: {response.status_code}")
+        
+        if response.status_code == 200:
+            logger.debug("Server is responding to HTTP requests")
+            return True
+        else:
+            logger.error(f"Server returned HTTP {response.status_code}")
+            logger.error(f"Response content: {response.text[:500]}")
+            return False
+    except requests.RequestException as e:
+        logger.error(f"HTTP request failed: {e}")
+        return False
 
 async def test_token_manually(access_token):
     """Test the access token directly with Graph API to validate it"""
@@ -54,9 +93,9 @@ async def test_token_manually(access_token):
 async def debug_pipeboard_token_endpoint(api_token):
     """Debug the Pipeboard token endpoint directly"""
     logger.debug(f"Debugging Pipeboard token endpoint...")
-    url = f"{PIPEBOARD_API_BASE}/meta/token"
+    # Pass token as URL parameter instead of Authorization header
+    url = f"{PIPEBOARD_API_BASE}/meta/token?api_token={api_token}"
     headers = {
-        "Authorization": f"Bearer {api_token}",
         "Content-Type": "application/json"
     }
     
@@ -93,12 +132,29 @@ async def inspect_api_call_params(token):
     except Exception as e:
         logger.error(f"Error getting function source: {e}")
 
-async def test_pipeboard_authentication(api_token=None, force_login=False, verbose=False):
+async def test_pipeboard_authentication(api_token=None, force_login=False, verbose=False, check_server=False):
     """Test the Pipeboard authentication flow and run a simple command"""
     print("===== Meta Ads MCP Authentication Test via Pipeboard.co =====")
     
     if verbose:
         print(f"Debug mode is ENABLED. Check logs for detailed information.")
+    
+    # Test server connectivity if requested
+    if check_server:
+        print("\nTesting server connectivity...")
+        server_url = PIPEBOARD_API_BASE.rsplit('/api', 1)[0]  # Get base URL without /api
+        if test_server_connectivity(server_url):
+            print(f"✅ Pipeboard server at {server_url} is reachable")
+        else:
+            print(f"❌ CONNECTIVITY ERROR: Cannot reach Pipeboard server at {server_url}")
+            print("Please check if the server is running and reachable from your machine.")
+            print(f"Current PIPEBOARD_API_BASE is set to: {PIPEBOARD_API_BASE}")
+            print("\nPossible issues:")
+            print("1. Server is not running at the expected address")
+            print("2. Firewall is blocking the connection")
+            print("3. Network connectivity issues")
+            print("4. Incorrect server URL in environment variables")
+            return
     
     # Set the Pipeboard API token if provided
     if api_token:
@@ -182,7 +238,9 @@ async def test_pipeboard_authentication(api_token=None, force_login=False, verbo
         print("\nFetching ad accounts to test token...")
         logger.debug("Calling get_ad_accounts with token...")
         try:
-            ad_accounts_json = await get_ad_accounts(token)
+            # Directly call the function with the token, not relying on the wrapper
+            # to find it from auth manager
+            ad_accounts_json = await get_ad_accounts(access_token=token, user_id="me", limit=10)
             logger.debug(f"API Response raw: {ad_accounts_json[:500]}...")
             
             try:
@@ -190,22 +248,42 @@ async def test_pipeboard_authentication(api_token=None, force_login=False, verbo
                 
                 # Check for error response
                 if isinstance(ad_accounts, dict) and ad_accounts.get("error"):
-                    error_info = ad_accounts.get("error", {})
-                    print(f"Error from Meta API: {error_info.get('message', 'Unknown error')}")
-                    logger.error(f"Detailed error info: {json.dumps(error_info, indent=2)}")
+                    # Direct error message
+                    if isinstance(ad_accounts["error"], str):
+                        print(f"Error from Meta API: {ad_accounts['error']}")
+                        logger.error(f"Error message: {ad_accounts['error']}")
+                        
+                        # Check for details
+                        if "details" in ad_accounts and isinstance(ad_accounts["details"], dict):
+                            error_details = ad_accounts["details"]
+                            logger.error(f"Error details: {json.dumps(error_details, indent=2)}")
+                            print(f"Error details: {error_details.get('message', 'No additional details')}")
+                    # Error object
+                    elif isinstance(ad_accounts["error"], dict):
+                        error_info = ad_accounts["error"]
+                        print(f"Error from Meta API: {error_info.get('message', 'Unknown error')}")
+                        logger.error(f"Detailed error info: {json.dumps(error_info, indent=2)}")
+                        
+                        # Specific error handling for common issues
+                        if "code" in error_info:
+                            code = error_info.get("code")
+                            if code == 190:
+                                print("\n⚠️ Error 190: Invalid or expired access token")
+                                print("This likely means your token has expired or been invalidated by Meta.")
+                            elif code == 4:
+                                print("\n⚠️ Error 4: Application request limit reached")
+                                print("You have hit Meta's API rate limits.")
+                            elif code == 200:
+                                print("\n⚠️ Error 200: Permission error")
+                                print("The token doesn't have permission for the requested operation.")
                     
-                    # Specific error handling for common issues
-                    if "code" in error_info:
-                        code = error_info.get("code")
-                        if code == 190:
-                            print("\n⚠️ Error 190: Invalid or expired access token")
-                            print("This likely means your token has expired or been invalidated by Meta.")
-                        elif code == 4:
-                            print("\n⚠️ Error 4: Application request limit reached")
-                            print("You have hit Meta's API rate limits.")
-                        elif code == 200:
-                            print("\n⚠️ Error 200: Permission error")
-                            print("The token doesn't have permission for the requested operation.")
+                    # If there's a login_url in the response, show it
+                    if "login_url" in ad_accounts:
+                        print(f"\nPlease re-authenticate using this URL: {ad_accounts['login_url']}")
+                    
+                    # Look for markdown_link which may contain a clickable auth link
+                    if "markdown_link" in ad_accounts:
+                        print(f"\nAuthentication link: {ad_accounts['markdown_link']}")
                     
                     return
                 
@@ -233,7 +311,13 @@ if __name__ == "__main__":
     parser.add_argument("--api-token", type=str, help="Pipeboard API token for authentication")
     parser.add_argument("--force-login", action="store_true", help="Force new login even if cached token exists")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose debug logging")
+    parser.add_argument("--check-server", action="store_true", help="Test server connectivity before proceeding")
     
     args = parser.parse_args()
     
-    asyncio.run(test_pipeboard_authentication(api_token=args.api_token, force_login=args.force_login, verbose=args.verbose)) 
+    asyncio.run(test_pipeboard_authentication(
+        api_token=args.api_token, 
+        force_login=args.force_login, 
+        verbose=args.verbose,
+        check_server=args.check_server
+    )) 

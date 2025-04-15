@@ -22,7 +22,7 @@ from .callback_server import (
 from .pipeboard_auth import pipeboard_auth_manager
 
 # Auth constants
-AUTH_SCOPE = "ads_management,ads_read,business_management"
+AUTH_SCOPE = "ads_management,ads_read,business_management,public_profile"
 AUTH_REDIRECT_URI = "http://localhost:8888/callback"
 AUTH_RESPONSE_TYPE = "token"
 
