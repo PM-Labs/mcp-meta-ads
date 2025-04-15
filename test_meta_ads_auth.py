@@ -33,38 +33,38 @@ async def test_authentication(app_id=None, force_login=False):
     # Force authentication if requested
     if force_login:
         print("Forcing new authentication...")
-        token = auth_manager.authenticate(force_refresh=True)
+        auth_manager.authenticate(force_refresh=True)
     else:
         print("Getting access token (using cached token if available)...")
         token = auth_manager.get_access_token()
+        if token:
+            # Mask token for display
+            masked_token = token[:10] + "..." + token[-5:]
+            print(f"Access token obtained: {masked_token}")
+        else:
+            print("No token available. Authentication may be required.")
     
-    if token:
-        # Mask token for display
-        masked_token = token[:10] + "..." + token[-5:]
-        print(f"Access token obtained: {masked_token}")
-        
-        # Test the token by getting ad accounts
-        print("\nFetching ad accounts to test token...")
-        ad_accounts_json = await get_ad_accounts(access_token=token)
-        
-        # Check if ad_accounts_json is already a dictionary or a JSON string
-        if isinstance(ad_accounts_json, dict):
-            ad_accounts = ad_accounts_json
-        else:
-            ad_accounts = json.loads(ad_accounts_json)
-        
-        if "error" in ad_accounts:
-            print(f"Error fetching ad accounts: {ad_accounts['error']}")
-        else:
-            # Display accounts in a nice format
-            print("\nAd Accounts:")
-            if "data" in ad_accounts and ad_accounts["data"]:
-                for i, account in enumerate(ad_accounts["data"], 1):
-                    print(f"  {i}. {account.get('name', 'Unnamed')} (ID: {account.get('id', 'Unknown')})")
-            else:
-                print("  No ad accounts found.")
+    # Test the API by getting ad accounts - not explicitly passing the token
+    # The @meta_api_tool decorator will handle authentication implicitly
+    print("\nFetching ad accounts to test API connectivity...")
+    ad_accounts_json = await get_ad_accounts()
+    
+    # Check if ad_accounts_json is already a dictionary or a JSON string
+    if isinstance(ad_accounts_json, dict):
+        ad_accounts = ad_accounts_json
     else:
-        print("Failed to obtain access token. Authentication failed.")
+        ad_accounts = json.loads(ad_accounts_json)
+    
+    if "error" in ad_accounts:
+        print(f"Error fetching ad accounts: {ad_accounts['error']}")
+    else:
+        # Display accounts in a nice format
+        print("\nAd Accounts:")
+        if "data" in ad_accounts and ad_accounts["data"]:
+            for i, account in enumerate(ad_accounts["data"], 1):
+                print(f"  {i}. {account.get('name', 'Unnamed')} (ID: {account.get('id', 'Unknown')})")
+        else:
+            print("  No ad accounts found.")
     
     print("\n===== Test Complete =====")
 
