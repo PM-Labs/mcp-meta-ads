@@ -14,8 +14,11 @@ import logging
 logger.setLevel(logging.DEBUG)
 
 # Base URL for pipeboard API
-#PIPEBOARD_API_BASE = "https://pipeboard.co/api"
+# Using localhost:3000/api as specified in meta_auth_test.sh
 PIPEBOARD_API_BASE = "http://localhost:3000/api"
+
+# Debug message about API base URL
+logger.info(f"Pipeboard API base URL: {PIPEBOARD_API_BASE}")
 
 class TokenInfo:
     """Stores token information including expiration"""
@@ -113,6 +116,10 @@ class PipeboardAuthManager:
     def __init__(self):
         self.api_token = os.environ.get("PIPEBOARD_API_TOKEN", "")
         logger.debug(f"PipeboardAuthManager initialized with API token: {self.api_token[:5]}..." if self.api_token else "No API token")
+        if self.api_token:
+            logger.info("Pipeboard authentication enabled. Will use pipeboard.co for Meta authentication.")
+        else:
+            logger.info("Pipeboard authentication not enabled. Set PIPEBOARD_API_TOKEN environment variable to enable.")
         self.token_info = None
         self._load_cached_token()
     
@@ -202,29 +209,42 @@ class PipeboardAuthManager:
             logger.error("No PIPEBOARD_API_TOKEN environment variable set")
             raise ValueError("No PIPEBOARD_API_TOKEN environment variable set")
             
-        # Pass token as URL parameter instead of Authorization header
+        # Exactly match the format used in meta_auth_test.sh
         url = f"{PIPEBOARD_API_BASE}/meta/auth?api_token={self.api_token}"
         headers = {
             "Content-Type": "application/json"
         }
         
-        logger.debug(f"Initiating auth flow with POST request to {url}")
+        logger.info(f"Initiating auth flow with POST request to {url}")
         
         try:
+            # Make the POST request exactly as in the working meta_auth_test.sh script
             response = requests.post(url, headers=headers)
-            logger.debug(f"Auth flow response status: {response.status_code}")
+            logger.info(f"Auth flow response status: {response.status_code}")
             
             # Better error handling
             if response.status_code != 200:
                 logger.error(f"Auth flow error: HTTP {response.status_code}")
-                logger.error(f"Response content: {response.text}")
-                response.raise_for_status()
+                error_text = response.text if response.text else "No response content"
+                logger.error(f"Response content: {error_text}")
+                if response.status_code == 404:
+                    raise ValueError(f"Pipeboard API endpoint not found. Check if the server is running at {PIPEBOARD_API_BASE}")
+                elif response.status_code == 401:
+                    raise ValueError(f"Unauthorized: Invalid API token. Check your PIPEBOARD_API_TOKEN.")
                 
-            data = response.json()
+                response.raise_for_status()
+            
+            # Parse the response    
+            try:
+                data = response.json()
+                logger.info(f"Received response keys: {', '.join(data.keys())}")
+            except json.JSONDecodeError:
+                logger.error(f"Could not parse JSON response: {response.text}")
+                raise ValueError(f"Invalid JSON response from auth endpoint: {response.text[:100]}")
             
             # Log auth flow response (without sensitive information)
             if 'loginUrl' in data:
-                logger.debug(f"Auth flow initiated successfully with login URL: {data['loginUrl'][:30]}...")
+                logger.info(f"Auth flow initiated successfully with login URL: {data['loginUrl'][:30]}...")
             else:
                 logger.warning(f"Auth flow response missing loginUrl field. Response keys: {', '.join(data.keys())}")
             
@@ -258,28 +278,34 @@ class PipeboardAuthManager:
             logger.debug("Using existing valid token")
             return self.token_info.access_token
         
-        logger.debug(f"Getting new token (force_refresh={force_refresh})")
+        logger.info(f"Getting new token (force_refresh={force_refresh})")
         
         # If force refresh or no token/expired token, get a new one from Pipeboard
         try:
-            # Make a request to get the token, passing API token as URL parameter
+            # Make a request to get the token, using the same URL format as initiate_auth_flow
             url = f"{PIPEBOARD_API_BASE}/meta/token?api_token={self.api_token}"
             headers = {
                 "Content-Type": "application/json"
             }
             
-            logger.debug(f"Requesting token from {url}")
+            logger.info(f"Requesting token from {url}")
             
             response = requests.get(url, headers=headers)
-            logger.debug(f"Token request response status: {response.status_code}")
+            logger.info(f"Token request response status: {response.status_code}")
             
             # Better error handling with response content
             if response.status_code != 200:
                 logger.error(f"Token request error: HTTP {response.status_code}")
-                logger.error(f"Response content: {response.text}")
+                error_text = response.text if response.text else "No response content"
+                logger.error(f"Response content: {error_text}")
                 response.raise_for_status()
                 
-            data = response.json()
+            try:
+                data = response.json()
+                logger.info(f"Received token response with keys: {', '.join(data.keys())}")
+            except json.JSONDecodeError:
+                logger.error(f"Invalid JSON in token response: {response.text[:100]}")
+                return None
             
             # Validate response data
             if "access_token" not in data:
@@ -299,7 +325,7 @@ class PipeboardAuthManager:
             self._save_token_to_cache()
             
             masked_token = self.token_info.access_token[:10] + "..." + self.token_info.access_token[-5:] if self.token_info.access_token else "None"
-            logger.info(f"Successfully retrieved access token from pipeboard.co: {masked_token}")
+            logger.info(f"Successfully retrieved access token: {masked_token}")
             return self.token_info.access_token
         except requests.RequestException as e:
             status_code = e.response.status_code if hasattr(e, 'response') and e.response else None
@@ -309,12 +335,8 @@ class PipeboardAuthManager:
                 logger.error(f"Unauthorized: Check your PIPEBOARD_API_TOKEN. Response: {response_text}")
             elif status_code == 404:
                 logger.error(f"No token available: You might need to complete authorization first. Response: {response_text}")
-                # Provide the login URL
-                try:
-                    auth_data = self.initiate_auth_flow()
-                    logger.info(f"Please visit this URL to authorize: {auth_data.get('loginUrl', 'No URL available')}")
-                except Exception as auth_error:
-                    logger.error(f"Error initiating auth flow after 404: {auth_error}")
+                # Return None so caller can handle the auth flow
+                return None
             else:
                 logger.error(f"Error getting access token (status {status_code}): {e}")
                 logger.error(f"Response content: {response_text}")

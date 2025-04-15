@@ -7,7 +7,44 @@ Meta Ads MCP - Command Line Entry Point
 This script provides the command-line entry point for the Meta Ads MCP package.
 """
 
+import sys
+import os
+import webbrowser
 from meta_ads_mcp import main
+from meta_ads_mcp.core.pipeboard_auth import pipeboard_auth_manager
 
 if __name__ == "__main__":
+    # Check if we have a Pipeboard token environment variable
+    pipeboard_api_token = os.environ.get("PIPEBOARD_API_TOKEN")
+    if pipeboard_api_token:
+        print("Using Pipeboard authentication...")
+        # Check for existing token
+        token = pipeboard_auth_manager.get_access_token()
+        if not token:
+            print("No valid token found. Initiating browser-based authentication...")
+            try:
+                # Initialize the auth flow and get the login URL
+                auth_data = pipeboard_auth_manager.initiate_auth_flow()
+                login_url = auth_data.get('loginUrl')
+                if login_url:
+                    print(f"Opening browser with login URL: {login_url}")
+                    webbrowser.open(login_url)
+                    print("Please complete authorization in your browser.")
+                    print("Then wait while the token is retrieved...")
+                    
+                    # Poll for token
+                    import time
+                    for i in range(30):  # Try for 60 seconds
+                        print(f"Waiting for authentication... ({i+1}/30)")
+                        token = pipeboard_auth_manager.get_access_token(force_refresh=True)
+                        if token:
+                            print("Authentication successful!")
+                            break
+                        time.sleep(2)
+                else:
+                    print("Error: Could not get login URL")
+            except Exception as e:
+                print(f"Error during authentication: {e}")
+    
+    # Start the main application
     main() 
