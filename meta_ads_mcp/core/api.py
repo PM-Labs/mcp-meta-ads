@@ -193,7 +193,7 @@ def meta_api_tool(func):
             logger.debug(f"Current app_id: {app_id}")
             logger.debug(f"META_APP_ID env var: {os.environ.get('META_APP_ID')}")
             
-            # If access_token is not in kwargs, try to get it from auth_manager
+            # If access_token is not in kwargs or not kwargs['access_token'], try to get it from auth_manager
             if 'access_token' not in kwargs or not kwargs['access_token']:
                 try:
                     access_token = await get_current_access_token()
@@ -202,13 +202,36 @@ def meta_api_tool(func):
                         logger.debug("Using access token from auth_manager")
                     else:
                         logger.warning("No access token available from auth_manager")
+                        # Add more details about why token might be missing
+                        if (auth_manager.app_id == "YOUR_META_APP_ID" or not auth_manager.app_id) and not auth_manager.use_pipeboard:
+                            logger.error("TOKEN VALIDATION FAILED: No valid app_id configured")
+                            logger.error("Please set META_APP_ID environment variable or configure in your code")
+                        else:
+                            logger.error("Check logs above for detailed token validation failures")
                 except Exception as e:
                     logger.error(f"Error getting access token: {str(e)}")
+                    # Add stack trace for better debugging
+                    import traceback
+                    logger.error(f"Stack trace: {traceback.format_exc()}")
             
             # Final validation - if we still don't have a valid token, return authentication required
             if 'access_token' not in kwargs or not kwargs['access_token']:
                 logger.warning("No access token available, authentication needed")
+                
+                # Add more specific troubleshooting information
                 auth_url = auth_manager.get_auth_url()
+                app_id = auth_manager.app_id
+                
+                logger.error("TOKEN VALIDATION SUMMARY:")
+                logger.error(f"- Current app_id: '{app_id}'")
+                logger.error(f"- Environment META_APP_ID: '{os.environ.get('META_APP_ID', 'Not set')}'")
+                logger.error(f"- Pipeboard API token configured: {'Yes' if os.environ.get('PIPEBOARD_API_TOKEN') else 'No'}")
+                
+                # Check for common configuration issues
+                if app_id == "YOUR_META_APP_ID" or not app_id:
+                    logger.error("ISSUE DETECTED: No valid Meta App ID configured")
+                    logger.error("ACTION REQUIRED: Set META_APP_ID environment variable with a valid App ID")
+                
                 return json.dumps({
                     "error": {
                         "message": "Authentication Required",
@@ -216,6 +239,11 @@ def meta_api_tool(func):
                             "description": "You need to authenticate with the Meta API before using this tool",
                             "action_required": "Please authenticate first",
                             "auth_url": auth_url,
+                            "configuration_status": {
+                                "app_id_configured": bool(app_id) and app_id != "YOUR_META_APP_ID",
+                                "pipeboard_enabled": bool(os.environ.get('PIPEBOARD_API_TOKEN')),
+                            },
+                            "troubleshooting": "Check logs for TOKEN VALIDATION FAILED messages",
                             "markdown_link": f"[Click here to authenticate with Meta Ads API]({auth_url})"
                         }
                     }

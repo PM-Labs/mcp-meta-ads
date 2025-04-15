@@ -273,10 +273,22 @@ class PipeboardAuthManager:
         Returns:
             Access token if available, None otherwise
         """
+        # First check if API token is configured
+        if not self.api_token:
+            logger.error("TOKEN VALIDATION FAILED: No Pipeboard API token configured")
+            logger.error("Please set PIPEBOARD_API_TOKEN environment variable")
+            return None
+            
         # Check if we already have a valid token
         if not force_refresh and self.token_info and not self.token_info.is_expired():
             logger.debug("Using existing valid token")
             return self.token_info.access_token
+            
+        # If we have a token but it's expired, log that information
+        if not force_refresh and self.token_info and self.token_info.is_expired():
+            logger.error("TOKEN VALIDATION FAILED: Existing token is expired")
+            if self.token_info.expires_at:
+                logger.error(f"Token expiration time: {self.token_info.expires_at}")
         
         logger.info(f"Getting new token (force_refresh={force_refresh})")
         
@@ -290,28 +302,52 @@ class PipeboardAuthManager:
             
             logger.info(f"Requesting token from {url}")
             
-            response = requests.get(url, headers=headers)
+            # Add timeout for better error messages
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+            except requests.exceptions.Timeout:
+                logger.error("TOKEN VALIDATION FAILED: Timeout while connecting to Pipeboard API")
+                logger.error(f"Could not connect to {PIPEBOARD_API_BASE} within 10 seconds")
+                return None
+            except requests.exceptions.ConnectionError:
+                logger.error("TOKEN VALIDATION FAILED: Connection error with Pipeboard API")
+                logger.error(f"Could not connect to {PIPEBOARD_API_BASE} - check if service is running")
+                return None
+                
             logger.info(f"Token request response status: {response.status_code}")
             
             # Better error handling with response content
             if response.status_code != 200:
-                logger.error(f"Token request error: HTTP {response.status_code}")
+                logger.error(f"TOKEN VALIDATION FAILED: HTTP error {response.status_code}")
                 error_text = response.text if response.text else "No response content"
                 logger.error(f"Response content: {error_text}")
+                
+                # Add more specific error messages for common status codes
+                if response.status_code == 401:
+                    logger.error("Authentication failed: Invalid Pipeboard API token")
+                elif response.status_code == 404:
+                    logger.error("Endpoint not found: Check if Pipeboard API service is running correctly")
+                elif response.status_code == 400:
+                    logger.error("Bad request: The request to Pipeboard API was malformed")
+                    
                 response.raise_for_status()
                 
             try:
                 data = response.json()
                 logger.info(f"Received token response with keys: {', '.join(data.keys())}")
             except json.JSONDecodeError:
-                logger.error(f"Invalid JSON in token response: {response.text[:100]}")
+                logger.error("TOKEN VALIDATION FAILED: Invalid JSON response from Pipeboard API")
+                logger.error(f"Response content (first 100 chars): {response.text[:100]}")
                 return None
             
             # Validate response data
             if "access_token" not in data:
-                logger.error(f"No access_token in response. Response keys: {', '.join(data.keys())}")
+                logger.error("TOKEN VALIDATION FAILED: No access_token in Pipeboard API response")
+                logger.error(f"Response keys: {', '.join(data.keys())}")
                 if "error" in data:
-                    logger.error(f"Error in response: {data['error']}")
+                    logger.error(f"Error details: {data['error']}")
+                else:
+                    logger.error("No error information available in response")
                 return None
                 
             # Create new token info
@@ -373,7 +409,13 @@ class PipeboardAuthManager:
         """
         if not self.token_info or not self.token_info.access_token:
             logger.debug("No token to test")
+            logger.error("TOKEN VALIDATION FAILED: Missing token to test")
             return False
+            
+        # Log token details for debugging (partial token for security)
+        masked_token = self.token_info.access_token[:5] + "..." + self.token_info.access_token[-5:] if self.token_info.access_token else "None"
+        token_type = self.token_info.token_type if hasattr(self.token_info, 'token_type') and self.token_info.token_type else "bearer"
+        logger.debug(f"Testing token validity (token: {masked_token}, type: {token_type})")
             
         try:
             # Make a simple request to the /me endpoint to test the token
@@ -382,18 +424,60 @@ class PipeboardAuthManager:
             headers = {"Authorization": f"Bearer {self.token_info.access_token}"}
             
             logger.debug(f"Testing token validity with request to {url}")
-            response = requests.get(url, headers=headers)
+            
+            # Add timeout and better error handling
+            try:
+                response = requests.get(url, headers=headers, timeout=10)
+            except requests.exceptions.Timeout:
+                logger.error("TOKEN VALIDATION FAILED: Timeout while connecting to Meta API")
+                logger.error("The Graph API did not respond within 10 seconds")
+                return False
+            except requests.exceptions.ConnectionError:
+                logger.error("TOKEN VALIDATION FAILED: Connection error with Meta API")
+                logger.error("Could not establish connection to Graph API - check network connectivity")
+                return False
             
             if response.status_code == 200:
                 data = response.json()
                 logger.debug(f"Token is valid. User ID: {data.get('id')}")
+                # Add more useful user information for debugging
+                user_info = f"User ID: {data.get('id')}"
+                if 'name' in data:
+                    user_info += f", Name: {data.get('name')}"
+                logger.info(f"Meta API token validated successfully ({user_info})")
                 return True
             else:
-                logger.error(f"Token validation failed with status {response.status_code}")
-                logger.error(f"Response: {response.text}")
+                logger.error(f"TOKEN VALIDATION FAILED: API returned status {response.status_code}")
+                
+                # Try to parse the error response for more detailed information
+                try:
+                    error_data = response.json()
+                    if 'error' in error_data:
+                        error_obj = error_data.get('error', {})
+                        error_code = error_obj.get('code', 'unknown')
+                        error_message = error_obj.get('message', 'Unknown error')
+                        logger.error(f"Meta API error: Code {error_code} - {error_message}")
+                        
+                        # Add specific guidance for common error codes
+                        if error_code == 190:
+                            logger.error("Error indicates the token is invalid or has expired")
+                        elif error_code == 4:
+                            logger.error("Error indicates rate limiting - too many requests")
+                        elif error_code == 200:
+                            logger.error("Error indicates API permissions or configuration issue")
+                    else:
+                        logger.error(f"No error object in response: {error_data}")
+                except json.JSONDecodeError:
+                    logger.error(f"Could not parse error response: {response.text[:200]}")
+                
                 return False
         except Exception as e:
-            logger.error(f"Error testing token validity: {e}")
+            logger.error(f"TOKEN VALIDATION FAILED: Unexpected error: {str(e)}")
+            
+            # Add stack trace for debugging complex issues
+            import traceback
+            logger.error(f"Stack trace: {traceback.format_exc()}")
+            
             return False
 
 

@@ -406,18 +406,55 @@ async def get_current_access_token() -> Optional[str]:
     app_id = meta_config.get_app_id()
     logger.debug(f"Current app_id: {app_id}")
     
+    # Check if using Pipeboard authentication
+    using_pipeboard = auth_manager.use_pipeboard
+    
+    # Check if app_id is valid - but only if not using Pipeboard authentication
+    if not app_id and not using_pipeboard:
+        logger.error("TOKEN VALIDATION FAILED: No valid app_id configured")
+        logger.error("Please set META_APP_ID environment variable or configure via meta_config.set_app_id()")
+        return None
+    
     # Attempt to get access token
     try:
         token = auth_manager.get_access_token()
         
         if token:
-            logger.debug("Access token found in auth_manager")
+            # Add basic token validation - check if it looks like a valid token
+            if len(token) < 20:  # Most Meta tokens are much longer
+                logger.error(f"TOKEN VALIDATION FAILED: Token appears malformed (length: {len(token)})")
+                auth_manager.invalidate_token()
+                return None
+                
+            logger.debug(f"Access token found in auth_manager (starts with: {token[:10]}...)")
             return token
         else:
             logger.warning("No valid access token available in auth_manager")
+            
+            # Check why token might be missing
+            if hasattr(auth_manager, 'token_info') and auth_manager.token_info:
+                if auth_manager.token_info.is_expired():
+                    logger.error("TOKEN VALIDATION FAILED: Token is expired")
+                    # Add expiration details
+                    if hasattr(auth_manager.token_info, 'expires_in') and auth_manager.token_info.expires_in:
+                        expiry_time = auth_manager.token_info.created_at + auth_manager.token_info.expires_in
+                        current_time = int(time.time())
+                        expired_seconds_ago = current_time - expiry_time
+                        logger.error(f"Token expired {expired_seconds_ago} seconds ago")
+                elif not auth_manager.token_info.access_token:
+                    logger.error("TOKEN VALIDATION FAILED: Token object exists but access_token is empty")
+                else:
+                    logger.error("TOKEN VALIDATION FAILED: Token exists but was rejected for unknown reason")
+            else:
+                logger.error("TOKEN VALIDATION FAILED: No token information available")
+                
+            # Suggest next steps for troubleshooting
+            logger.error("To fix: Try re-authenticating or check if your token has been revoked")
             return None
     except Exception as e:
         logger.error(f"Error getting access token: {str(e)}")
+        import traceback
+        logger.error(f"Token validation stacktrace: {traceback.format_exc()}")
         return None
 
 
