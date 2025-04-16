@@ -28,6 +28,11 @@ Screenhot: using an LLM to understand your ad performance.
 When using uv no specific installation is needed. We can use uvx to directly run meta-ads-mcp:
 
 ```bash
+# RECOMMENDED: Use with Pipeboard authentication
+export PIPEBOARD_API_TOKEN=your_pipeboard_token  # Get your token at https://pipeboard.co
+uvx meta-ads-mcp
+
+# Alternative: Use with direct Meta authentication
 uvx meta-ads-mcp --app-id YOUR_META_ADS_APP_ID
 ```
 
@@ -55,14 +60,49 @@ pip install meta-ads-mcp
 After installation, you can run it as:
 
 ```bash
+# RECOMMENDED: Use with Pipeboard authentication
+export PIPEBOARD_API_TOKEN=your_pipeboard_token  # Get your token at https://pipeboard.co
 python -m meta_ads_mcp
+
+# Alternative: Use with direct Meta authentication
+python -m meta_ads_mcp --app-id YOUR_META_ADS_APP_ID
 ```
 
 ## Configuration
 
+### Quick Start with Pipeboard Authentication (Recommended)
+
+The easiest way to configure Meta Ads MCP is using Pipeboard authentication:
+
+1. Sign up at [Pipeboard.co](https://pipeboard.co) and generate an API token - **Get your free token at [https://pipeboard.co](https://pipeboard.co)**
+2. Set the environment variable:
+   ```bash
+   export PIPEBOARD_API_TOKEN=your_pipeboard_token
+   ```
+3. Run meta-ads-mcp without needing to set up a Meta Developer App:
+   ```bash
+   uvx meta-ads-mcp
+   ```
+
+This method provides longer-lived tokens (60 days), simplified setup, and automatic token renewal.
+
 ### Usage with Claude in Cursor
 
 Add this to your `claude_desktop_config.json` to integrate with Claude in Cursor:
+
+```json
+"mcpServers": {
+  "meta-ads": {
+    "command": "uvx",
+    "args": ["meta-ads-mcp"],
+    "env": {
+      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"
+    }
+  }
+}
+```
+
+Or if you prefer direct Meta authentication:
 
 ```json
 "mcpServers": {
@@ -225,11 +265,11 @@ Before using the MCP server, you'll need to set up a Meta Developer App:
 
 The Meta Ads MCP supports two authentication methods:
 
-### 1. Pipeboard Authentication (Recommended)
+### 1. Pipeboard Authentication (Recommended ⭐)
 
 This method uses [Pipeboard.co](https://pipeboard.co) to manage Meta API authentication, providing longer-lived tokens and a simplified flow:
 
-1. Set up your Pipeboard account and generate an API token from your dashboard
+1. **Get your Pipeboard token**: Sign up at [https://pipeboard.co](https://pipeboard.co) to generate your free API token
 2. Set the `PIPEBOARD_API_TOKEN` environment variable with your token: 
    ```bash
    export PIPEBOARD_API_TOKEN=your_pipeboard_token
@@ -240,11 +280,11 @@ This method uses [Pipeboard.co](https://pipeboard.co) to manage Meta API authent
    ```
 4. The first time you run a command, you'll be provided with a login URL to authorize with Meta
 
-Benefits of Pipeboard authentication:
-- Longer-lived tokens (60 days)
-- No need to configure a Meta Developer App
-- Simpler setup with just an API token
-- Automatic token renewal
+**Benefits of Pipeboard authentication:**
+- ✅ Longer-lived tokens (60 days)
+- ✅ No need to configure a Meta Developer App
+- ✅ Simpler setup with just an API token
+- ✅ Automatic token renewal
 
 To test the Pipeboard authentication flow:
 ```bash
@@ -276,21 +316,29 @@ Log files are stored in a platform-specific location:
 
 ### Common Issues
 
-#### App ID Issues
+#### Authentication Issues
 
-If you encounter errors like `(#200) Provide valid app ID`, check the following:
+If you're having authentication problems:
 
-1. Ensure you've set up a Meta Developer App correctly
-2. Verify that you're passing the correct App ID using one of these methods:
-   - Set the `META_APP_ID` environment variable: `export META_APP_ID=your_app_id`
-   - Pass it as a command-line argument: `meta-ads-mcp --app-id your_app_id`
+1. **Recommended: Use Pipeboard Authentication**
+   - Set `export PIPEBOARD_API_TOKEN=your_token` and retry
+   - This provides longer-lived tokens and better reliability
+   - Verify your token in the Pipeboard dashboard
 
-#### Authentication Errors
+2. For App ID issues (when using direct authentication):
+   If you encounter errors like `(#200) Provide valid app ID`, check the following:
+   - Ensure you've set up a Meta Developer App correctly
+   - Verify that you're passing the correct App ID using one of these methods:
+     - Set the `META_APP_ID` environment variable: `export META_APP_ID=your_app_id`
+     - Pass it as a command-line argument: `meta-ads-mcp --app-id your_app_id`
 
-Authentication errors can be tracked in the log file. Check for:
-- Token expiration issues
-- App permission problems
-- Connection errors
+#### API Errors
+
+If you receive errors from the Meta API:
+
+1. Verify your app has the Marketing API product added
+2. Ensure the user has appropriate permissions on the ad accounts
+3. Check if there are rate limits or other restrictions on your app
 
 ### Debugging Command
 
