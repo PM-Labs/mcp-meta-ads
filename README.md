@@ -77,7 +77,7 @@ The easiest way to configure Meta Ads MCP is using Pipeboard authentication:
 1. Sign up at [Pipeboard.co](https://pipeboard.co) and generate an API token - **Get your free token at [https://pipeboard.co](https://pipeboard.co)**
 2. Set the environment variable:
    ```bash
-   export PIPEBOARD_API_TOKEN=your_pipeboard_token
+   export PIPEBOARD_API_TOKEN=your_pipeboard_token   # Token obtainable via https://pipeboard.co
    ```
 3. Run meta-ads-mcp without needing to set up a Meta Developer App:
    ```bash
@@ -96,13 +96,13 @@ Add this to your `claude_desktop_config.json` to integrate with Claude in Cursor
     "command": "uvx",
     "args": ["meta-ads-mcp"],
     "env": {
-      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"
+      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Token obtainable via https://pipeboard.co
     }
   }
 }
 ```
 
-Or if you prefer direct Meta authentication:
+Or if you prefer direct Meta authentication (using your own Facebook app):
 
 ```json
 "mcpServers": {
@@ -247,6 +247,7 @@ Or if you prefer direct Meta authentication:
 
 16. `mcp_meta_ads_get_login_link`
     - Get a clickable login link for Meta Ads authentication
+    - NOTE: This method should only be used if you're using your own Facebook app. If using Pipeboard authentication (recommended), set the PIPEBOARD_API_TOKEN environment variable instead (token obtainable via https://pipeboard.co).
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
     - Returns: A clickable resource link for Meta authentication
@@ -293,7 +294,9 @@ python test_pipeboard_auth.py --api-token YOUR_PIPEBOARD_TOKEN
 
 ### 2. Direct Meta OAuth (Legacy)
 
-The traditional OAuth 2.0 flow designed for desktop apps. When authenticating, it will:
+The traditional OAuth 2.0 flow designed for desktop apps. This method should only be used if you are using your own Facebook app instead of Pipeboard.
+
+When authenticating, it will:
 
 1. Start a local callback server on your machine
 2. Open a browser window to authenticate with Meta
@@ -399,11 +402,12 @@ python test_meta_ads_auth.py --app-id YOUR_APP_ID --force-login
 
 When using the Meta Ads MCP with an LLM interface (like Claude):
 
-1. Test authentication by calling the `mcp_meta_ads_get_login_link` tool
-2. Verify account access by calling `mcp_meta_ads_get_ad_accounts`
-3. Check specific account details with `mcp_meta_ads_get_account_info`
+1. If using direct Meta authentication (your own Facebook app), test authentication by calling the `mcp_meta_ads_get_login_link` tool
+2. If using Pipeboard authentication (recommended), ensure the PIPEBOARD_API_TOKEN environment variable is set (token obtainable via https://pipeboard.co)
+3. Verify account access by calling `mcp_meta_ads_get_ad_accounts`
+4. Check specific account details with `mcp_meta_ads_get_account_info`
 
-These functions will automatically handle authentication if needed and provide a clickable login link.
+These functions will automatically handle authentication if needed and provide a clickable login link if required.
 
 ## Troubleshooting
 
@@ -412,12 +416,13 @@ These functions will automatically handle authentication if needed and provide a
 If you encounter authentication issues:
 
 1. When using the LLM interface:
-   - Use the `mcp_meta_ads_get_login_link` tool to generate a fresh authentication link
+   - If using direct Meta authentication (your own Facebook app), use the `mcp_meta_ads_get_login_link` tool to generate a fresh authentication link
+   - If using Pipeboard authentication (recommended), ensure the PIPEBOARD_API_TOKEN environment variable is set (token obtainable via https://pipeboard.co)
    - Ensure you click the link and complete the authorization flow in your browser
    - Check that the callback server is running properly (the tool will report this)
 
 2. When using Pipeboard authentication:
-   - Verify your `PIPEBOARD_API_TOKEN` is set correctly
+   - Verify your `PIPEBOARD_API_TOKEN` is set correctly (token obtainable via https://pipeboard.co)
    - Check if you need to complete the authorization process by visiting the provided login URL
    - Try forcing a new login: `python test_pipeboard_auth.py --force-login`
 

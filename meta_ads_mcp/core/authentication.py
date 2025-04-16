@@ -15,6 +15,10 @@ async def get_login_link(access_token: str = None) -> str:
     """
     Get a clickable login link for Meta Ads authentication.
     
+    NOTE: This method should only be used if you're using your own Facebook app.
+    If using Pipeboard authentication (recommended), set the PIPEBOARD_API_TOKEN
+    environment variable instead (token obtainable via https://pipeboard.co).
+    
     Args:
         access_token: Meta API access token (optional - will use cached token if not provided)
     
