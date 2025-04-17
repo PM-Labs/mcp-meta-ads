@@ -1,7 +1,7 @@
 """Ad and Creative-related functionality for Meta Ads API."""
 
 import json
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import io
 from PIL import Image as PILImage
 from mcp.server.fastmcp import Image
@@ -85,6 +85,7 @@ async def create_ad(
     creative_id: str = None,
     status: str = "PAUSED",
     bid_amount = None,
+    tracking_specs: Optional[List[Dict[str, Any]]] = None,
     access_token: str = None
 ) -> str:
     """
@@ -97,6 +98,8 @@ async def create_ad(
         creative_id: ID of an existing creative to use
         status: Initial ad status (default: PAUSED)
         bid_amount: Optional bid amount in account currency (in cents)
+        tracking_specs: Optional tracking specifications (e.g., for pixel events).
+                      Example: [{"action.type":"offsite_conversion","fb_pixel":["YOUR_PIXEL_ID"]}]
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     # Check required parameters
@@ -124,6 +127,10 @@ async def create_ad(
     # Add bid amount if provided
     if bid_amount is not None:
         params["bid_amount"] = str(bid_amount)
+        
+    # Add tracking specs if provided
+    if tracking_specs is not None:
+        params["tracking_specs"] = json.dumps(tracking_specs) # Needs to be JSON encoded string
     
     try:
         data = await make_api_request(endpoint, access_token, params, method="POST")
@@ -150,145 +157,19 @@ async def get_ad_creatives(access_token: str = None, ad_id: str = None) -> str:
     if not ad_id:
         return json.dumps({"error": "No ad ID provided"}, indent=2)
         
-    # First, get the creative ID from the ad
-    endpoint = f"{ad_id}"
+    endpoint = f"{ad_id}/adcreatives"
     params = {
-        "fields": "creative"
+        "fields": "id,name,status,thumbnail_url,image_url,image_hash,object_story_spec" # Added image_hash
     }
     
-    ad_data = await make_api_request(endpoint, access_token, params)
+    data = await make_api_request(endpoint, access_token, params)
     
-    if "error" in ad_data:
-        return json.dumps(ad_data, indent=2)
-    
-    if "creative" not in ad_data:
-        return json.dumps({"error": "No creative found for this ad"}, indent=2)
-    
-    creative_id = ad_data.get("creative", {}).get("id")
-    if not creative_id:
-        return json.dumps({"error": "Creative ID not found", "ad_data": ad_data}, indent=2)
-    
-    # Now get the creative details with essential fields
-    creative_endpoint = f"{creative_id}"
-    creative_params = {
-        "fields": "id,name,title,body,image_url,object_story_spec,url_tags,link_url,thumbnail_url,image_hash,asset_feed_spec,object_type"
-    }
-    
-    creative_data = await make_api_request(creative_endpoint, access_token, creative_params)
-    
-    # Try to get full-size images in different ways:
-    
-    # 1. First approach: Get ad images directly using the adimages endpoint
-    if "image_hash" in creative_data:
-        image_hash = creative_data.get("image_hash")
-        image_endpoint = f"act_{ad_data.get('account_id', '')}/adimages"
-        image_params = {
-            "hashes": [image_hash]
-        }
-        image_data = await make_api_request(image_endpoint, access_token, image_params)
-        if "data" in image_data and len(image_data["data"]) > 0:
-            creative_data["full_image_url"] = image_data["data"][0].get("url")
-    
-    # 2. For creatives with object_story_spec
-    if "object_story_spec" in creative_data:
-        spec = creative_data.get("object_story_spec", {})
-        
-        # For link ads
-        if "link_data" in spec:
-            link_data = spec.get("link_data", {})
-            # If there's an explicit image_url, use it
-            if "image_url" in link_data:
-                creative_data["full_image_url"] = link_data.get("image_url")
-            # If there's an image_hash, try to get the full image
-            elif "image_hash" in link_data:
-                image_hash = link_data.get("image_hash")
-                account_id = ad_data.get('account_id', '')
-                if not account_id:
-                    # Try to get account ID from ad ID
-                    ad_details_endpoint = f"{ad_id}"
-                    ad_details_params = {
-                        "fields": "account_id"
-                    }
-                    ad_details = await make_api_request(ad_details_endpoint, access_token, ad_details_params)
-                    account_id = ad_details.get('account_id', '')
-                
-                if account_id:
-                    image_endpoint = f"act_{account_id}/adimages"
-                    image_params = {
-                        "hashes": [image_hash]
-                    }
-                    image_data = await make_api_request(image_endpoint, access_token, image_params)
-                    if "data" in image_data and len(image_data["data"]) > 0:
-                        creative_data["full_image_url"] = image_data["data"][0].get("url")
-        
-        # For photo ads
-        if "photo_data" in spec:
-            photo_data = spec.get("photo_data", {})
-            if "image_hash" in photo_data:
-                image_hash = photo_data.get("image_hash")
-                account_id = ad_data.get('account_id', '')
-                if not account_id:
-                    # Try to get account ID from ad ID
-                    ad_details_endpoint = f"{ad_id}"
-                    ad_details_params = {
-                        "fields": "account_id"
-                    }
-                    ad_details = await make_api_request(ad_details_endpoint, access_token, ad_details_params)
-                    account_id = ad_details.get('account_id', '')
-                
-                if account_id:
-                    image_endpoint = f"act_{account_id}/adimages"
-                    image_params = {
-                        "hashes": [image_hash]
-                    }
-                    image_data = await make_api_request(image_endpoint, access_token, image_params)
-                    if "data" in image_data and len(image_data["data"]) > 0:
-                        creative_data["full_image_url"] = image_data["data"][0].get("url")
-    
-    # 3. If there's an asset_feed_spec, try to get images from there
-    if "asset_feed_spec" in creative_data and "images" in creative_data["asset_feed_spec"]:
-        images = creative_data["asset_feed_spec"]["images"]
-        if images and len(images) > 0 and "hash" in images[0]:
-            image_hash = images[0]["hash"]
-            account_id = ad_data.get('account_id', '')
-            if not account_id:
-                # Try to get account ID
-                ad_details_endpoint = f"{ad_id}"
-                ad_details_params = {
-                    "fields": "account_id"
-                }
-                ad_details = await make_api_request(ad_details_endpoint, access_token, ad_details_params)
-                account_id = ad_details.get('account_id', '')
-            
-            if account_id:
-                image_endpoint = f"act_{account_id}/adimages"
-                image_params = {
-                    "hashes": [image_hash]
-                }
-                image_data = await make_api_request(image_endpoint, access_token, image_params)
-                if "data" in image_data and len(image_data["data"]) > 0:
-                    creative_data["full_image_url"] = image_data["data"][0].get("url")
-    
-    # If we have a thumbnail_url but no full_image_url, let's attempt to convert the thumbnail URL to full size
-    if "thumbnail_url" in creative_data and "full_image_url" not in creative_data:
-        thumbnail_url = creative_data["thumbnail_url"]
-        # Try to convert the URL to get higher resolution by removing size parameters
-        if "p64x64" in thumbnail_url:
-            full_url = thumbnail_url.replace("p64x64", "p1080x1080")
-            creative_data["full_image_url"] = full_url
-        elif "dst-emg0" in thumbnail_url:
-            # Remove the dst-emg0 parameter that seems to reduce size
-            full_url = thumbnail_url.replace("dst-emg0_", "")
-            creative_data["full_image_url"] = full_url
-    
-    # Fallback to using thumbnail or image_url if we still don't have a full image
-    if "full_image_url" not in creative_data:
-        if "thumbnail_url" in creative_data:
-            creative_data["full_image_url"] = creative_data["thumbnail_url"]
-        elif "image_url" in creative_data:
-            creative_data["full_image_url"] = creative_data["image_url"]
-    
-    return json.dumps(creative_data, indent=2)
+    # Add image URLs for direct viewing if available
+    if 'data' in data:
+        for creative in data['data']:
+            creative['image_urls_for_viewing'] = ad_creative_images(creative)
+
+    return json.dumps(data, indent=2)
 
 
 @mcp_server.tool()
@@ -429,7 +310,13 @@ async def get_ad_image(access_token: str = None, ad_id: str = None) -> Image:
 
 @mcp_server.tool()
 @meta_api_tool
-async def update_ad(ad_id: str, status: str = None, bid_amount: int = None, access_token: str = None) -> str:
+async def update_ad(
+    ad_id: str,
+    status: str = None,
+    bid_amount: int = None,
+    tracking_specs: Optional[List[Dict[str, Any]]] = None,
+    access_token: str = None
+) -> str:
     """
     Update an ad with new settings.
     
@@ -437,51 +324,25 @@ async def update_ad(ad_id: str, status: str = None, bid_amount: int = None, acce
         ad_id: Meta Ads ad ID
         status: Update ad status (ACTIVE, PAUSED, etc.)
         bid_amount: Bid amount in account currency (in cents for USD)
+        tracking_specs: Optional tracking specifications (e.g., for pixel events).
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     if not ad_id:
-        return json.dumps({"error": "No ad ID provided"}, indent=2)
-    
-    changes = {}
-    
-    if status is not None:
-        changes['status'] = status
-        
+        return json.dumps({"error": "Ad ID is required"}, indent=2)
+
+    params = {}
+    if status:
+        params["status"] = status
     if bid_amount is not None:
-        changes['bid_amount'] = bid_amount
-    
-    if not changes:
-        return json.dumps({"error": "No update parameters provided"}, indent=2)
-    
-    # Get current ad details for comparison
-    current_details_json = await get_ad_details(ad_id=ad_id, access_token=access_token)
-    current_details = json.loads(current_details_json)
-    
-    # Import the callback server components
-    from .callback_server import start_callback_server, update_confirmation
-    import urllib.parse
-    
-    # Start the callback server if not already running
-    port = start_callback_server()
-    
-    # Generate confirmation URL with properly encoded parameters
-    changes_json = json.dumps(changes)
-    encoded_changes = urllib.parse.quote(changes_json)
-    confirmation_url = f"http://localhost:{port}/confirm-update?ad_id={ad_id}&token={access_token}&changes={encoded_changes}"
-    
-    # Reset the update confirmation
-    update_confirmation.clear()
-    update_confirmation.update({"approved": False})
-    
-    # Return the confirmation link
-    response = {
-        "message": "Please confirm the ad update",
-        "confirmation_url": confirmation_url,
-        "markdown_link": f"[Click here to confirm ad update]({confirmation_url})",
-        "current_details": current_details,
-        "proposed_changes": changes,
-        "instructions_for_llm": "You must present this link as clickable Markdown to the user using the markdown_link format provided.",
-        "note": "After authenticating, the token will be automatically saved and your ad will be updated. Refresh the browser page if it doesn't load immediately."
-    }
-    
-    return json.dumps(response, indent=2) 
+        # Ensure bid_amount is sent as a string if it's not null
+        params["bid_amount"] = str(bid_amount)
+    if tracking_specs is not None: # Add tracking_specs to params if provided
+        params["tracking_specs"] = json.dumps(tracking_specs) # Needs to be JSON encoded string
+
+    if not params:
+        return json.dumps({"error": "No update parameters provided (status, bid_amount, or tracking_specs)"}, indent=2)
+
+    endpoint = f"{ad_id}"
+    data = await make_api_request(endpoint, access_token, params, method='POST')
+
+    return json.dumps(data, indent=2)
