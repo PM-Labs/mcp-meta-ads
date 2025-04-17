@@ -54,6 +54,10 @@ async def get_campaigns(access_token: str = None, account_id: str = None, limit:
 async def get_campaign_details(access_token: str = None, campaign_id: str = None) -> str:
     """
     Get detailed information about a specific campaign.
+
+    Note: This function requests a specific set of fields ('id,name,objective,status,...'). 
+    The Meta API offers many other fields for campaigns (e.g., 'effective_status', 'source_campaign_id', etc.) 
+    that could be added to the 'fields' parameter in the code if needed.
     
     Args:
         access_token: Meta API access token (optional - will use cached token if not provided)
