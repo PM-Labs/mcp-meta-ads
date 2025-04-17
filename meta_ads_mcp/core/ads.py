@@ -78,6 +78,67 @@ async def get_ad_details(access_token: str = None, ad_id: str = None) -> str:
 
 @mcp_server.tool()
 @meta_api_tool
+async def create_ad(
+    account_id: str = None,
+    name: str = None,
+    adset_id: str = None,
+    creative_id: str = None,
+    status: str = "PAUSED",
+    bid_amount = None,
+    access_token: str = None
+) -> str:
+    """
+    Create a new ad with an existing creative.
+    
+    Args:
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX)
+        name: Ad name
+        adset_id: Ad set ID where this ad will be placed
+        creative_id: ID of an existing creative to use
+        status: Initial ad status (default: PAUSED)
+        bid_amount: Optional bid amount in account currency (in cents)
+        access_token: Meta API access token (optional - will use cached token if not provided)
+    """
+    # Check required parameters
+    if not account_id:
+        return json.dumps({"error": "No account ID provided"}, indent=2)
+    
+    if not name:
+        return json.dumps({"error": "No ad name provided"}, indent=2)
+    
+    if not adset_id:
+        return json.dumps({"error": "No ad set ID provided"}, indent=2)
+    
+    if not creative_id:
+        return json.dumps({"error": "No creative ID provided"}, indent=2)
+    
+    endpoint = f"{account_id}/ads"
+    
+    params = {
+        "name": name,
+        "adset_id": adset_id,
+        "creative": {"creative_id": creative_id},
+        "status": status
+    }
+    
+    # Add bid amount if provided
+    if bid_amount is not None:
+        params["bid_amount"] = str(bid_amount)
+    
+    try:
+        data = await make_api_request(endpoint, access_token, params, method="POST")
+        return json.dumps(data, indent=2)
+    except Exception as e:
+        error_msg = str(e)
+        return json.dumps({
+            "error": "Failed to create ad",
+            "details": error_msg,
+            "params_sent": params
+        }, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
 async def get_ad_creatives(access_token: str = None, ad_id: str = None) -> str:
     """
     Get creative details for a specific ad. Best if combined with get_ad_image to get the full image.
