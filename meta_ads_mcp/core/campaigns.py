@@ -1,7 +1,7 @@
 """Campaign-related functionality for Meta Ads API."""
 
 import json
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Union
 from .api import meta_api_tool, make_api_request
 from .accounts import get_ad_accounts
 from .server import mcp_server
@@ -76,7 +76,13 @@ async def create_campaign(
     status: str = "PAUSED",
     special_ad_categories: List[str] = None,
     daily_budget: Optional[int] = None,
-    lifetime_budget: Optional[int] = None
+    lifetime_budget: Optional[int] = None,
+    buying_type: str = None,
+    bid_strategy: str = None,
+    bid_cap: Optional[int] = None,
+    spend_cap: Optional[int] = None,
+    campaign_budget_optimization: bool = None,
+    ab_test_control_setups: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
     Create a new campaign in a Meta Ads account.
@@ -90,6 +96,12 @@ async def create_campaign(
         special_ad_categories: List of special ad categories if applicable
         daily_budget: Daily budget in account currency (in cents)
         lifetime_budget: Lifetime budget in account currency (in cents)
+        buying_type: Buying type (e.g., 'AUCTION')
+        bid_strategy: Bid strategy (e.g., 'LOWEST_COST', 'LOWEST_COST_WITH_BID_CAP', 'COST_CAP')
+        bid_cap: Bid cap in account currency (in cents)
+        spend_cap: Spending limit for the campaign in account currency (in cents)
+        campaign_budget_optimization: Whether to enable campaign budget optimization
+        ab_test_control_setups: Settings for A/B testing (e.g., [{"name":"Creative A", "ad_format":"SINGLE_IMAGE"}])
     """
     # Check required parameters
     if not account_id:
@@ -117,6 +129,25 @@ async def create_campaign(
     
     if lifetime_budget:
         params["lifetime_budget"] = lifetime_budget
+    
+    # Add new parameters
+    if buying_type:
+        params["buying_type"] = buying_type
+    
+    if bid_strategy:
+        params["bid_strategy"] = bid_strategy
+    
+    if bid_cap:
+        params["bid_cap"] = bid_cap
+    
+    if spend_cap:
+        params["spend_cap"] = spend_cap
+    
+    if campaign_budget_optimization is not None:
+        params["campaign_budget_optimization"] = campaign_budget_optimization
+    
+    if ab_test_control_setups:
+        params["ab_test_control_setups"] = json.dumps(ab_test_control_setups)
     
     data = await make_api_request(endpoint, access_token, params, method="POST")
     
