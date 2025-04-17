@@ -36,7 +36,7 @@ async def get_campaigns(access_token: str = None, account_id: str = None, limit:
     }
     
     if status_filter:
-        params["effective_status"] = [status_filter]
+        params["effective_status"] = status_filter
     
     data = await make_api_request(endpoint, access_token, params)
     
@@ -75,12 +75,12 @@ async def create_campaign(
     objective: str = None,
     status: str = "PAUSED",
     special_ad_categories: List[str] = None,
-    daily_budget: Optional[int] = None,
-    lifetime_budget: Optional[int] = None,
+    daily_budget: Optional[str] = None,
+    lifetime_budget: Optional[str] = None,
     buying_type: str = None,
     bid_strategy: str = None,
-    bid_cap: Optional[int] = None,
-    spend_cap: Optional[int] = None,
+    bid_cap: Optional[str] = None,
+    spend_cap: Optional[str] = None,
     campaign_budget_optimization: bool = None,
     ab_test_control_setups: Optional[List[Dict[str, Any]]] = None
 ) -> str:
@@ -94,12 +94,12 @@ async def create_campaign(
         objective: Campaign objective (AWARENESS, TRAFFIC, ENGAGEMENT, etc.)
         status: Initial campaign status (default: PAUSED)
         special_ad_categories: List of special ad categories if applicable
-        daily_budget: Daily budget in account currency (in cents)
-        lifetime_budget: Lifetime budget in account currency (in cents)
+        daily_budget: Daily budget in account currency (in cents) as a string
+        lifetime_budget: Lifetime budget in account currency (in cents) as a string
         buying_type: Buying type (e.g., 'AUCTION')
         bid_strategy: Bid strategy (e.g., 'LOWEST_COST', 'LOWEST_COST_WITH_BID_CAP', 'COST_CAP')
-        bid_cap: Bid cap in account currency (in cents)
-        spend_cap: Spending limit for the campaign in account currency (in cents)
+        bid_cap: Bid cap in account currency (in cents) as a string
+        spend_cap: Spending limit for the campaign in account currency (in cents) as a string
         campaign_budget_optimization: Whether to enable campaign budget optimization
         ab_test_control_setups: Settings for A/B testing (e.g., [{"name":"Creative A", "ad_format":"SINGLE_IMAGE"}])
     """
@@ -113,22 +113,29 @@ async def create_campaign(
     if not objective:
         return json.dumps({"error": "No campaign objective provided"}, indent=2)
     
+    # Special_ad_categories is required by the API, set default if not provided
+    if special_ad_categories is None:
+        special_ad_categories = []
+    
+    # Either daily_budget or lifetime_budget is required
+    if not daily_budget and not lifetime_budget:
+        return json.dumps({"error": "Either daily_budget or lifetime_budget must be provided"}, indent=2)
+    
     endpoint = f"{account_id}/campaigns"
     
     params = {
         "name": name,
         "objective": objective,
         "status": status,
+        "special_ad_categories": json.dumps(special_ad_categories)  # Properly format as JSON string
     }
     
-    if special_ad_categories:
-        params["special_ad_categories"] = special_ad_categories
-    
+    # Convert budget values to strings if they aren't already
     if daily_budget:
-        params["daily_budget"] = daily_budget
+        params["daily_budget"] = str(daily_budget)
     
     if lifetime_budget:
-        params["lifetime_budget"] = lifetime_budget
+        params["lifetime_budget"] = str(lifetime_budget)
     
     # Add new parameters
     if buying_type:
@@ -138,17 +145,24 @@ async def create_campaign(
         params["bid_strategy"] = bid_strategy
     
     if bid_cap:
-        params["bid_cap"] = bid_cap
+        params["bid_cap"] = str(bid_cap)
     
     if spend_cap:
-        params["spend_cap"] = spend_cap
+        params["spend_cap"] = str(spend_cap)
     
     if campaign_budget_optimization is not None:
-        params["campaign_budget_optimization"] = campaign_budget_optimization
+        params["campaign_budget_optimization"] = "true" if campaign_budget_optimization else "false"
     
     if ab_test_control_setups:
         params["ab_test_control_setups"] = json.dumps(ab_test_control_setups)
     
-    data = await make_api_request(endpoint, access_token, params, method="POST")
-    
-    return json.dumps(data, indent=2) 
+    try:
+        data = await make_api_request(endpoint, access_token, params, method="POST")
+        return json.dumps(data, indent=2)
+    except Exception as e:
+        error_msg = str(e)
+        return json.dumps({
+            "error": "Failed to create campaign",
+            "details": error_msg,
+            "params_sent": params
+        }, indent=2) 
