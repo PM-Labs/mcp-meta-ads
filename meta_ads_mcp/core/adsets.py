@@ -77,6 +77,112 @@ async def get_adset_details(access_token: str = None, adset_id: str = None) -> s
 
 @mcp_server.tool()
 @meta_api_tool
+async def create_adset(
+    account_id: str = None, 
+    campaign_id: str = None, 
+    name: str = None,
+    status: str = "PAUSED",
+    daily_budget = None,
+    lifetime_budget = None,
+    targeting: Dict[str, Any] = None,
+    optimization_goal: str = None,
+    billing_event: str = None,
+    bid_amount = None,
+    bid_strategy: str = None,
+    start_time: str = None,
+    end_time: str = None,
+    access_token: str = None
+) -> str:
+    """
+    Create a new ad set in a Meta Ads account.
+    
+    Args:
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX)
+        campaign_id: Meta Ads campaign ID this ad set belongs to
+        name: Ad set name
+        status: Initial ad set status (default: PAUSED)
+        daily_budget: Daily budget in account currency (in cents) as a string
+        lifetime_budget: Lifetime budget in account currency (in cents) as a string
+        targeting: Targeting specifications including age, location, interests, etc.
+                  Use targeting_automation.advantage_audience=1 for automatic audience finding
+        optimization_goal: Conversion optimization goal (e.g., 'LINK_CLICKS', 'REACH', 'CONVERSIONS')
+        billing_event: How you're charged (e.g., 'IMPRESSIONS', 'LINK_CLICKS')
+        bid_amount: Bid amount in account currency (in cents)
+        bid_strategy: Bid strategy (e.g., 'LOWEST_COST', 'LOWEST_COST_WITH_BID_CAP')
+        start_time: Start time in ISO 8601 format (e.g., '2023-12-01T12:00:00-0800')
+        end_time: End time in ISO 8601 format
+        access_token: Meta API access token (optional - will use cached token if not provided)
+    """
+    # Check required parameters
+    if not account_id:
+        return json.dumps({"error": "No account ID provided"}, indent=2)
+    
+    if not campaign_id:
+        return json.dumps({"error": "No campaign ID provided"}, indent=2)
+    
+    if not name:
+        return json.dumps({"error": "No ad set name provided"}, indent=2)
+    
+    if not optimization_goal:
+        return json.dumps({"error": "No optimization goal provided"}, indent=2)
+    
+    if not billing_event:
+        return json.dumps({"error": "No billing event provided"}, indent=2)
+    
+    # Basic targeting is required if not provided
+    if not targeting:
+        targeting = {
+            "age_min": 18,
+            "age_max": 65,
+            "geo_locations": {"countries": ["US"]},
+            "targeting_automation": {"advantage_audience": 1}
+        }
+    
+    endpoint = f"{account_id}/adsets"
+    
+    params = {
+        "name": name,
+        "campaign_id": campaign_id,
+        "status": status,
+        "optimization_goal": optimization_goal,
+        "billing_event": billing_event,
+        "targeting": json.dumps(targeting)  # Properly format as JSON string
+    }
+    
+    # Convert budget values to strings if they aren't already
+    if daily_budget is not None:
+        params["daily_budget"] = str(daily_budget)
+    
+    if lifetime_budget is not None:
+        params["lifetime_budget"] = str(lifetime_budget)
+    
+    # Add other parameters if provided
+    if bid_amount is not None:
+        params["bid_amount"] = str(bid_amount)
+    
+    if bid_strategy:
+        params["bid_strategy"] = bid_strategy
+    
+    if start_time:
+        params["start_time"] = start_time
+    
+    if end_time:
+        params["end_time"] = end_time
+    
+    try:
+        data = await make_api_request(endpoint, access_token, params, method="POST")
+        return json.dumps(data, indent=2)
+    except Exception as e:
+        error_msg = str(e)
+        return json.dumps({
+            "error": "Failed to create ad set",
+            "details": error_msg,
+            "params_sent": params
+        }, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
 async def update_adset(adset_id: str, frequency_control_specs: List[Dict[str, Any]] = None, bid_strategy: str = None, 
                         bid_amount: int = None, status: str = None, targeting: Dict[str, Any] = None, 
                         optimization_goal: str = None, access_token: str = None) -> str:
