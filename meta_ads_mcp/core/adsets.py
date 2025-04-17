@@ -74,11 +74,18 @@ async def get_adset_details(access_token: str = None, adset_id: str = None) -> s
         return json.dumps({"error": "No ad set ID provided"}, indent=2)
     
     endpoint = f"{adset_id}"
+    # Explicitly prioritize frequency_control_specs in the fields request
     params = {
-        "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining,frequency_control_specs{event,interval_days,max_frequency}"
+        "fields": "id,name,campaign_id,status,frequency_control_specs{event,interval_days,max_frequency},daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining"
     }
     
     data = await make_api_request(endpoint, access_token, params)
+    
+    # For debugging - check if frequency_control_specs was returned
+    if 'frequency_control_specs' not in data:
+        data['_meta'] = {
+            'note': 'No frequency_control_specs field was returned by the API. This means either no frequency caps are set or the API did not include this field in the response.'
+        }
     
     return json.dumps(data, indent=2)
 

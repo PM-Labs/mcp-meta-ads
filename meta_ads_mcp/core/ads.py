@@ -323,7 +323,7 @@ async def update_ad(
     ad_id: str,
     status: str = None,
     bid_amount: int = None,
-    tracking_specs: Optional[List[Dict[str, Any]]] = None,
+    tracking_specs = None,
     access_token: str = None
 ) -> str:
     """
