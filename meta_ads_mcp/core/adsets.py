@@ -32,15 +32,23 @@ async def get_adsets(access_token: str = None, account_id: str = None, limit: in
         else:
             return json.dumps({"error": "No account ID specified and no accounts found for user"}, indent=2)
     
-    endpoint = f"{account_id}/adsets"
-    params = {
-        "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,frequency_control_specs{event,interval_days,max_frequency}",
-        "limit": limit
-    }
-    
+    # Change endpoint based on whether campaign_id is provided
     if campaign_id:
-        params["campaign_id"] = campaign_id
-    
+        endpoint = f"{campaign_id}/adsets"
+        params = {
+            "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,frequency_control_specs{event,interval_days,max_frequency}",
+            "limit": limit
+        }
+    else:
+        # Use account endpoint if no campaign_id is given
+        endpoint = f"{account_id}/adsets"
+        params = {
+            "fields": "id,name,campaign_id,status,daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,frequency_control_specs{event,interval_days,max_frequency}",
+            "limit": limit
+        }
+        # Note: Removed the attempt to add campaign_id to params for the account endpoint case, 
+        # as it was ineffective and the logic now uses the correct endpoint for campaign filtering.
+
     data = await make_api_request(endpoint, access_token, params)
     
     return json.dumps(data, indent=2)
