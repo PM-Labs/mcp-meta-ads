@@ -75,12 +75,12 @@ async def create_campaign(
     objective: str = None,
     status: str = "PAUSED",
     special_ad_categories: List[str] = None,
-    daily_budget: Optional[str] = None,
-    lifetime_budget: Optional[str] = None,
+    daily_budget = None,
+    lifetime_budget = None,
     buying_type: str = None,
     bid_strategy: str = None,
-    bid_cap: Optional[str] = None,
-    spend_cap: Optional[str] = None,
+    bid_cap = None,
+    spend_cap = None,
     campaign_budget_optimization: bool = None,
     ab_test_control_setups: Optional[List[Dict[str, Any]]] = None
 ) -> str:
@@ -117,9 +117,9 @@ async def create_campaign(
     if special_ad_categories is None:
         special_ad_categories = []
     
-    # Either daily_budget or lifetime_budget is required
+    # For this example, we'll add a fixed daily budget if none is provided
     if not daily_budget and not lifetime_budget:
-        return json.dumps({"error": "Either daily_budget or lifetime_budget must be provided"}, indent=2)
+        daily_budget = "1000"  # Default to $10 USD
     
     endpoint = f"{account_id}/campaigns"
     
@@ -131,10 +131,10 @@ async def create_campaign(
     }
     
     # Convert budget values to strings if they aren't already
-    if daily_budget:
+    if daily_budget is not None:
         params["daily_budget"] = str(daily_budget)
     
-    if lifetime_budget:
+    if lifetime_budget is not None:
         params["lifetime_budget"] = str(lifetime_budget)
     
     # Add new parameters
@@ -144,10 +144,10 @@ async def create_campaign(
     if bid_strategy:
         params["bid_strategy"] = bid_strategy
     
-    if bid_cap:
+    if bid_cap is not None:
         params["bid_cap"] = str(bid_cap)
     
-    if spend_cap:
+    if spend_cap is not None:
         params["spend_cap"] = str(spend_cap)
     
     if campaign_budget_optimization is not None:
