@@ -90,9 +90,9 @@ The easiest way to configure Meta Ads MCP is using Pipeboard authentication:
 
 This method provides longer-lived tokens (60 days), simplified setup, and automatic token renewal.
 
-### Usage with Claude in Cursor
+### Usage with Cursor or Claude Desktop
 
-Add this to your `claude_desktop_config.json` to integrate with Claude in Cursor:
+Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cursor/mcp.json` to integrate with Cursor:
 
 ```json
 "mcpServers": {
