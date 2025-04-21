@@ -502,13 +502,5 @@ def login():
 # Initialize auth manager with a placeholder - will be updated at runtime
 META_APP_ID = os.environ.get("META_APP_ID", "YOUR_META_APP_ID")
 
-# Only show warnings about missing META_APP_ID/META_APP_SECRET when not using Pipeboard
-if not os.environ.get("PIPEBOARD_API_TOKEN"):
-    # Log warnings about missing environment variables
-    if META_APP_ID == "YOUR_META_APP_ID":
-        logger.warning("META_APP_ID environment variable is not set. Authentication will not work properly.")
-    
-    if not os.environ.get("META_APP_SECRET"):
-        logger.warning("META_APP_SECRET environment variable is not set. Long-lived token exchange will not work.")
-
+# Create the auth manager
 auth_manager = AuthManager(META_APP_ID) 
