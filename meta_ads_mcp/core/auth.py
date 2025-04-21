@@ -42,8 +42,8 @@ class MetaConfig:
         if cls._instance is None:
             logger.debug("Creating new MetaConfig instance")
             cls._instance = super(MetaConfig, cls).__new__(cls)
-            cls._instance.app_id = os.environ.get("META_APP_ID", "")
-            logger.info(f"MetaConfig initialized with app_id from env: {cls._instance.app_id}")
+            cls._instance.app_id = os.environ.get("META_APP_ID", "779761636818489")
+            logger.info(f"MetaConfig initialized with app_id from env/default: {cls._instance.app_id}")
         return cls._instance
     
     def set_app_id(self, app_id):
