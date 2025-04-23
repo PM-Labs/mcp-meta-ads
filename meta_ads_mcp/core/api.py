@@ -10,7 +10,7 @@ from .auth import needs_authentication, get_current_access_token, auth_manager, 
 from .utils import logger
 
 # Constants
-META_GRAPH_API_VERSION = "v20.0"
+META_GRAPH_API_VERSION = "v22.0"
 META_GRAPH_API_BASE = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}"
 USER_AGENT = "meta-ads-mcp/1.0"
 

@@ -22,7 +22,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 mcp_server = FastMCP("meta-ads-generated", use_consistent_tool_format=True)
 
 # Constants
-META_GRAPH_API_VERSION = "v20.0"
+META_GRAPH_API_VERSION = "v22.0"
 META_GRAPH_API_BASE = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}"
 USER_AGENT = "meta-ads-mcp/1.0"
 
@@ -253,7 +253,7 @@ class AuthManager:
     def get_auth_url(self) -> str:
         """Generate the Facebook OAuth URL for desktop app flow"""
         return (
-            f"https://www.facebook.com/v18.0/dialog/oauth?"
+            f"https://www.facebook.com/v22.0/dialog/oauth?"
             f"client_id={self.app_id}&"
             f"redirect_uri={self.redirect_uri}&"
             f"scope={AUTH_SCOPE}&"

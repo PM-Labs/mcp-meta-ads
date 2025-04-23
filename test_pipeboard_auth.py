@@ -26,7 +26,7 @@ from meta_ads_mcp.core.pipeboard_auth import pipeboard_auth_manager, PIPEBOARD_A
 from meta_ads_mcp.api import get_ad_accounts
 
 # Define Meta Graph API base URL for testing access token directly
-META_GRAPH_API_VERSION = "v20.0"
+META_GRAPH_API_VERSION = "v22.0"
 META_GRAPH_API_BASE = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}"
 
 def test_server_connectivity(server_url, port=3000):
