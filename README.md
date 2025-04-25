@@ -8,7 +8,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@pipeboard-co/meta-ads-mcp/badge" alt="Meta Ads MCP server" />
 </a>
 
-Screenhot: using an LLM to understand your ad performance.
+Screenshot: using an LLM to understand your ad performance.
 
 ![Meta Ads MCP in action: Visualize ad performance metrics and creative details directly in Claude or your favorite MCP client, with rich insights about campaign reach, engagement, and costs](./images/meta-ads-example.png)
 
@@ -32,11 +32,7 @@ Screenhot: using an LLM to understand your ad performance.
 When using uv no specific installation is needed. We can use uvx to directly run meta-ads-mcp:
 
 ```bash
-# RECOMMENDED: Use with Pipeboard authentication
-export PIPEBOARD_API_TOKEN=your_pipeboard_token  # Get your token at https://pipeboard.co
-uvx meta-ads-mcp
-
-# Alternative: Use with direct Meta authentication
+# Run with Meta authentication
 uvx meta-ads-mcp --app-id YOUR_META_ADS_APP_ID
 ```
 
@@ -64,49 +60,25 @@ pip install meta-ads-mcp
 After installation, you can run it as:
 
 ```bash
-# RECOMMENDED: Use with Pipeboard authentication
-export PIPEBOARD_API_TOKEN=your_pipeboard_token  # Get your token at https://pipeboard.co
-python -m meta_ads_mcp
-
-# Alternative: Use with direct Meta authentication
+# Run with Meta authentication
 python -m meta_ads_mcp --app-id YOUR_META_ADS_APP_ID
 ```
 
 ## Configuration
 
-### Quick Start with Pipeboard Authentication (Recommended)
+### Create a Meta Developer App (Required)
 
-The easiest way to configure Meta Ads MCP is using Pipeboard authentication:
+Before using the MCP server, you'll need to set up a Meta Developer App:
 
-1. Sign up at [Pipeboard.co](https://pipeboard.co) and generate an API token - **Get your free token at [https://pipeboard.co](https://pipeboard.co)**
-2. Set the environment variable:
-   ```bash
-   export PIPEBOARD_API_TOKEN=your_pipeboard_token   # Token obtainable via https://pipeboard.co
-   ```
-3. Run meta-ads-mcp without needing to set up a Meta Developer App:
-   ```bash
-   uvx meta-ads-mcp
-   ```
-
-This method provides longer-lived tokens (60 days), simplified setup, and automatic token renewal.
+1. Go to [Meta for Developers](https://developers.facebook.com/) and create a new app
+2. Choose the "Consumer" app type
+3. In your app settings, add the "Marketing API" product
+4. Configure your app's OAuth redirect URI to include `http://localhost:8888/callback`
+5. Note your App ID (Client ID) for use with the MCP
 
 ### Usage with Cursor or Claude Desktop
 
 Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cursor/mcp.json` to integrate with Cursor:
-
-```json
-"mcpServers": {
-  "meta-ads": {
-    "command": "uvx",
-    "args": ["meta-ads-mcp"],
-    "env": {
-      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Token obtainable via https://pipeboard.co
-    }
-  }
-}
-```
-
-Or if you prefer direct Meta authentication (using your own Facebook app):
 
 ```json
 "mcpServers": {
@@ -251,54 +223,13 @@ Or if you prefer direct Meta authentication (using your own Facebook app):
 
 16. `mcp_meta_ads_get_login_link`
     - Get a clickable login link for Meta Ads authentication
-    - NOTE: This method should only be used if you're using your own Facebook app. If using Pipeboard authentication (recommended), set the PIPEBOARD_API_TOKEN environment variable instead (token obtainable via https://pipeboard.co).
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
     - Returns: A clickable resource link for Meta authentication
 
-## Create a Meta Developer App
-
-Before using the MCP server, you'll need to set up a Meta Developer App:
-
-1. Go to [Meta for Developers](https://developers.facebook.com/) and create a new app
-2. Choose the "Consumer" app type
-3. In your app settings, add the "Marketing API" product
-4. Configure your app's OAuth redirect URI to include `http://localhost:8888/callback`
-5. Note your App ID (Client ID) for use with the MCP
-
 ## Authentication
 
-The Meta Ads MCP supports two authentication methods:
-
-### 1. Pipeboard Authentication (Recommended ⭐)
-
-This method uses [Pipeboard.co](https://pipeboard.co) to manage Meta API authentication, providing longer-lived tokens and a simplified flow:
-
-1. **Get your Pipeboard token**: Sign up at [https://pipeboard.co](https://pipeboard.co) to generate your free API token
-2. Set the `PIPEBOARD_API_TOKEN` environment variable with your token: 
-   ```bash
-   export PIPEBOARD_API_TOKEN=your_pipeboard_token
-   ```
-3. Run the Meta Ads MCP normally - it will automatically detect and use Pipeboard authentication:
-   ```bash
-   uvx meta-ads-mcp
-   ```
-4. The first time you run a command, you'll be provided with a login URL to authorize with Meta
-
-**Benefits of Pipeboard authentication:**
-- ✅ Longer-lived tokens (60 days)
-- ✅ No need to configure a Meta Developer App
-- ✅ Simpler setup with just an API token
-- ✅ Automatic token renewal
-
-To test the Pipeboard authentication flow:
-```bash
-python test_pipeboard_auth.py --api-token YOUR_PIPEBOARD_TOKEN
-```
-
-### 2. Direct Meta OAuth (Legacy)
-
-The traditional OAuth 2.0 flow designed for desktop apps. This method should only be used if you are using your own Facebook app instead of Pipeboard.
+The Meta Ads MCP uses Meta's OAuth 2.0 authentication flow, designed for desktop apps:
 
 When authenticating, it will:
 
@@ -307,7 +238,7 @@ When authenticating, it will:
 3. Ask you to authorize the app
 4. Redirect back to the local server to extract and store the token securely
 
-This method requires you to [create a Meta Developer App](#create-a-meta-developer-app) first.
+This method requires you to [create a Meta Developer App](#create-a-meta-developer-app) as described above.
 
 ## Troubleshooting and Logging
 
@@ -325,19 +256,11 @@ Log files are stored in a platform-specific location:
 
 #### Authentication Issues
 
-If you're having authentication problems:
-
-1. **Recommended: Use Pipeboard Authentication**
-   - Set `export PIPEBOARD_API_TOKEN=your_token` and retry
-   - This provides longer-lived tokens and better reliability
-   - Verify your token in the Pipeboard dashboard
-
-2. For App ID issues (when using direct authentication):
-   If you encounter errors like `(#200) Provide valid app ID`, check the following:
-   - Ensure you've set up a Meta Developer App correctly
-   - Verify that you're passing the correct App ID using one of these methods:
-     - Set the `META_APP_ID` environment variable: `export META_APP_ID=your_app_id`
-     - Pass it as a command-line argument: `meta-ads-mcp --app-id your_app_id`
+If you encounter errors like `(#200) Provide valid app ID`, check the following:
+- Ensure you've set up a Meta Developer App correctly
+- Verify that you're passing the correct App ID using one of these methods:
+  - Set the `META_APP_ID` environment variable: `export META_APP_ID=your_app_id`
+  - Pass it as a command-line argument: `meta-ads-mcp --app-id your_app_id`
 
 #### API Errors
 
@@ -376,15 +299,17 @@ uvx meta-ads-mcp --app-id=your_app_id
 The Meta Ads MCP follows security best practices:
 
 1. Tokens are cached in a platform-specific secure location:
-   - Windows: `%APPDATA%\meta-ads-mcp\token_cache.json` or `%APPDATA%\meta-ads-mcp\pipeboard_token_cache.json`
-   - macOS: `~/Library/Application Support/meta-ads-mcp/token_cache.json` or `~/Library/Application Support/meta-ads-mcp/pipeboard_token_cache.json`
-   - Linux: `~/.config/meta-ads-mcp/token_cache.json` or `~/.config/meta-ads-mcp/pipeboard_token_cache.json`
+   - Windows: `%APPDATA%\meta-ads-mcp\token_cache.json`
+   - macOS: `~/Library/Application Support/meta-ads-mcp/token_cache.json`
+   - Linux: `~/.config/meta-ads-mcp/token_cache.json`
 
 2. You do not need to provide your access token for each command; it will be automatically retrieved from the cache.
 
-3. You can set the following environment variables instead of passing them as arguments:
-   - `META_APP_ID`: Your Meta App ID (Client ID) - for direct OAuth method
-   - `PIPEBOARD_API_TOKEN`: Your Pipeboard API token - for Pipeboard authentication method
+3. You can set the `META_APP_ID` environment variable instead of passing it as an argument:
+   ```bash
+   export META_APP_ID=your_app_id
+   uvx meta-ads-mcp
+   ```
 
 ## Testing
 
@@ -406,10 +331,9 @@ python test_meta_ads_auth.py --app-id YOUR_APP_ID --force-login
 
 When using the Meta Ads MCP with an LLM interface (like Claude):
 
-1. If using direct Meta authentication (your own Facebook app), test authentication by calling the `mcp_meta_ads_get_login_link` tool
-2. If using Pipeboard authentication (recommended), ensure the PIPEBOARD_API_TOKEN environment variable is set (token obtainable via https://pipeboard.co)
-3. Verify account access by calling `mcp_meta_ads_get_ad_accounts`
-4. Check specific account details with `mcp_meta_ads_get_account_info`
+1. Test authentication by calling the `mcp_meta_ads_get_login_link` tool
+2. Verify account access by calling `mcp_meta_ads_get_ad_accounts`
+3. Check specific account details with `mcp_meta_ads_get_account_info`
 
 These functions will automatically handle authentication if needed and provide a clickable login link if required.
 
@@ -420,17 +344,11 @@ These functions will automatically handle authentication if needed and provide a
 If you encounter authentication issues:
 
 1. When using the LLM interface:
-   - If using direct Meta authentication (your own Facebook app), use the `mcp_meta_ads_get_login_link` tool to generate a fresh authentication link
-   - If using Pipeboard authentication (recommended), ensure the PIPEBOARD_API_TOKEN environment variable is set (token obtainable via https://pipeboard.co)
+   - Use the `mcp_meta_ads_get_login_link` tool to generate a fresh authentication link
    - Ensure you click the link and complete the authorization flow in your browser
    - Check that the callback server is running properly (the tool will report this)
 
-2. When using Pipeboard authentication:
-   - Verify your `PIPEBOARD_API_TOKEN` is set correctly (token obtainable via https://pipeboard.co)
-   - Check if you need to complete the authorization process by visiting the provided login URL
-   - Try forcing a new login: `python test_pipeboard_auth.py --force-login`
-
-3. When using direct Meta OAuth:
+2. When using direct Meta OAuth:
    - Run with `--force-login` to get a fresh token: `uvx meta-ads-mcp --login --app-id YOUR_APP_ID --force-login`
    - Make sure the terminal has permissions to open a browser window
 
