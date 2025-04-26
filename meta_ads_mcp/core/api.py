@@ -6,7 +6,7 @@ import httpx
 import asyncio
 import functools
 import os
-from .auth import needs_authentication, get_current_access_token, auth_manager, start_callback_server
+from .auth import needs_authentication, get_current_access_token, auth_manager, start_callback_server, shutdown_callback_server
 from .utils import logger
 
 # Constants

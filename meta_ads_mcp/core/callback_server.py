@@ -24,6 +24,11 @@ callback_server_thread = None
 callback_server_lock = threading.Lock()
 callback_server_running = False
 callback_server_port = None
+callback_server_instance = None
+server_shutdown_timer = None
+
+# Timeout in seconds before shutting down the callback server
+CALLBACK_SERVER_TIMEOUT = 180  # 3 minutes timeout
 
 
 class CallbackHandler(BaseHTTPRequestHandler):
@@ -877,6 +882,35 @@ class CallbackHandler(BaseHTTPRequestHandler):
         return
 
 
+def shutdown_callback_server():
+    """
+    Shutdown the callback server if it's running
+    """
+    global callback_server_thread, callback_server_running, callback_server_port, callback_server_instance, server_shutdown_timer
+    
+    with callback_server_lock:
+        if not callback_server_running:
+            print("Callback server is not running")
+            return
+        
+        if server_shutdown_timer is not None:
+            server_shutdown_timer.cancel()
+            server_shutdown_timer = None
+        
+        print(f"Shutting down callback server on port {callback_server_port}")
+        
+        # Shutdown the server if it exists
+        if callback_server_instance:
+            try:
+                callback_server_instance.shutdown()
+                callback_server_instance = None
+                callback_server_running = False
+                print("Callback server has been shut down")
+            except Exception as e:
+                print(f"Error shutting down callback server: {e}")
+        else:
+            print("No server instance to shut down")
+
 def start_callback_server() -> int:
     """
     Start the callback server if it's not already running
@@ -884,11 +918,21 @@ def start_callback_server() -> int:
     Returns:
         Port number the server is running on
     """
-    global callback_server_thread, callback_server_running, callback_server_port
+    global callback_server_thread, callback_server_running, callback_server_port, callback_server_instance, server_shutdown_timer
     
     with callback_server_lock:
         if callback_server_running:
             print(f"Callback server already running on port {callback_server_port}")
+            
+            # Reset the shutdown timer if one exists
+            if server_shutdown_timer is not None:
+                server_shutdown_timer.cancel()
+            
+            server_shutdown_timer = threading.Timer(CALLBACK_SERVER_TIMEOUT, shutdown_callback_server)
+            server_shutdown_timer.daemon = True
+            server_shutdown_timer.start()
+            print(f"Reset server shutdown timer to {CALLBACK_SERVER_TIMEOUT} seconds")
+            
             return callback_server_port
         
         # Find an available port
@@ -909,6 +953,7 @@ def start_callback_server() -> int:
         try:
             # Create and start server in a daemon thread
             server = HTTPServer(('localhost', port), CallbackHandler)
+            callback_server_instance = server
             print(f"Callback server starting on port {port}")
             
             # Create a simple flag to signal when the server is ready
@@ -937,6 +982,15 @@ def start_callback_server() -> int:
                 print("Warning: Timeout waiting for server to start, but continuing anyway")
             
             callback_server_running = True
+            
+            # Set a timer to shutdown the server after CALLBACK_SERVER_TIMEOUT seconds
+            if server_shutdown_timer is not None:
+                server_shutdown_timer.cancel()
+            
+            server_shutdown_timer = threading.Timer(CALLBACK_SERVER_TIMEOUT, shutdown_callback_server)
+            server_shutdown_timer.daemon = True
+            server_shutdown_timer.start()
+            print(f"Server will automatically shut down after {CALLBACK_SERVER_TIMEOUT} seconds of inactivity")
             
             # Verify the server is actually accepting connections
             try:

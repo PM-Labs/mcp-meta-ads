@@ -13,9 +13,10 @@ import requests
 
 # Import from the new callback server module
 from .callback_server import (
-    start_callback_server, 
+    start_callback_server,
+    shutdown_callback_server,
     token_container,
-    update_confirmation
+    callback_server_port
 )
 
 # Import the new Pipeboard authentication

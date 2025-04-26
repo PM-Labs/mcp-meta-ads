@@ -6,7 +6,7 @@ from .api import meta_api_tool, make_api_request
 from .accounts import get_ad_accounts
 from .server import mcp_server
 import asyncio
-from .callback_server import start_callback_server, update_confirmation
+from .callback_server import start_callback_server, shutdown_callback_server, update_confirmation
 import urllib.parse
 
 
