@@ -311,6 +311,13 @@ The Meta Ads MCP follows security best practices:
    uvx meta-ads-mcp
    ```
 
+4. You can provide a direct access token using the `META_ACCESS_TOKEN` environment variable. This bypasses both the local token cache and the Pipeboard authentication method:
+   ```bash
+   export META_ACCESS_TOKEN=your_access_token
+   uvx meta-ads-mcp
+   ```
+   This is useful for CI/CD pipelines or when you already have a valid access token from another source.
+
 ## Testing
 
 ### CLI Testing
@@ -351,6 +358,11 @@ If you encounter authentication issues:
 2. When using direct Meta OAuth:
    - Run with `--force-login` to get a fresh token: `uvx meta-ads-mcp --login --app-id YOUR_APP_ID --force-login`
    - Make sure the terminal has permissions to open a browser window
+
+3. Skip authentication entirely by providing a token directly:
+   - If you already have a valid access token, you can bypass the authentication flow:
+   - `export META_ACCESS_TOKEN=your_access_token`
+   - This will ignore both the local token cache and the Pipeboard authentication
 
 ### API Errors
 
