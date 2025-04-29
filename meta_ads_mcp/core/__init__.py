@@ -9,6 +9,7 @@ from .insights import get_insights, debug_image_download
 from .authentication import get_login_link
 from .server import login_cli, main
 from .auth import login
+from .ads_library import search_ads_archive
 
 __all__ = [
     'mcp_server',
@@ -31,4 +32,5 @@ __all__ = [
     'login_cli',
     'login',
     'main',
+    'search_ads_archive',
 ] 

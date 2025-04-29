@@ -23,7 +23,9 @@ async def get_campaigns(access_token: str = None, account_id: str = None, limit:
         access_token: Meta API access token (optional - will use cached token if not provided)
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         limit: Maximum number of campaigns to return (default: 10)
-        status_filter: Filter by status (empty for all, or 'ACTIVE', 'PAUSED', etc.)
+        status_filter: Filter by effective status (e.g., 'ACTIVE', 'PAUSED', 'ARCHIVED').
+                       Maps to the 'effective_status' API parameter, which expects an array
+                       (this function handles the required JSON formatting). Leave empty for all statuses.
     """
     # If no account ID is specified, try to get the first one for the user
     if not account_id:
@@ -42,7 +44,8 @@ async def get_campaigns(access_token: str = None, account_id: str = None, limit:
     }
     
     if status_filter:
-        params["effective_status"] = status_filter
+        # API expects an array, encode it as a JSON string
+        params["effective_status"] = json.dumps([status_filter])
     
     data = await make_api_request(endpoint, access_token, params)
     
