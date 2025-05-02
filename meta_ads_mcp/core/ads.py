@@ -5,6 +5,8 @@ from typing import Optional, Dict, Any, List
 import io
 from PIL import Image as PILImage
 from mcp.server.fastmcp import Image
+import os
+import time
 
 from .api import meta_api_tool, make_api_request
 from .accounts import get_ad_accounts
@@ -319,6 +321,132 @@ async def get_ad_image(access_token: str = None, ad_id: str = None) -> Image:
 
 @mcp_server.tool()
 @meta_api_tool
+async def save_ad_image_locally(access_token: str = None, ad_id: str = None, output_dir: str = "ad_images") -> str:
+    """
+    Get, download, and save a Meta ad image locally, returning the file path.
+    
+    Args:
+        access_token: Meta API access token (optional - will use cached token if not provided)
+        ad_id: Meta Ads ad ID
+        output_dir: Directory to save the image file (default: 'ad_images')
+    
+    Returns:
+        The file path to the saved image, or an error message string.
+    """
+    if not ad_id:
+        return json.dumps({"error": "No ad ID provided"}, indent=2)
+        
+    print(f"Attempting to get and save creative image for ad {ad_id}")
+    
+    # First, get creative and account IDs
+    ad_endpoint = f"{ad_id}"
+    ad_params = {
+        "fields": "creative{id},account_id"
+    }
+    
+    ad_data = await make_api_request(ad_endpoint, access_token, ad_params)
+    
+    if "error" in ad_data:
+        return json.dumps({"error": f"Could not get ad data - {json.dumps(ad_data)}"}, indent=2)
+    
+    account_id = ad_data.get("account_id")
+    if not account_id:
+        return json.dumps({"error": "No account ID found for ad"}, indent=2)
+    
+    if "creative" not in ad_data:
+        return json.dumps({"error": "No creative found for this ad"}, indent=2)
+        
+    creative_data = ad_data.get("creative", {})
+    creative_id = creative_data.get("id")
+    if not creative_id:
+        return json.dumps({"error": "No creative ID found"}, indent=2)
+    
+    # Get creative details to find image hash
+    creative_endpoint = f"{creative_id}"
+    creative_params = {
+        "fields": "id,name,image_hash,asset_feed_spec"
+    }
+    creative_details = await make_api_request(creative_endpoint, access_token, creative_params)
+    
+    image_hashes = []
+    if "image_hash" in creative_details:
+        image_hashes.append(creative_details["image_hash"])
+    if "asset_feed_spec" in creative_details and "images" in creative_details["asset_feed_spec"]:
+        for image in creative_details["asset_feed_spec"]["images"]:
+            if "hash" in image:
+                image_hashes.append(image["hash"])
+    
+    if not image_hashes:
+        # Fallback attempt (as in get_ad_image)
+        creative_json = await get_ad_creatives(ad_id=ad_id, access_token=access_token) # Ensure ad_id is passed correctly
+        creative_data_list = json.loads(creative_json)
+        if 'data' in creative_data_list and creative_data_list['data']:
+             first_creative = creative_data_list['data'][0]
+             if 'object_story_spec' in first_creative and 'link_data' in first_creative['object_story_spec'] and 'image_hash' in first_creative['object_story_spec']['link_data']:
+                 image_hashes.append(first_creative['object_story_spec']['link_data']['image_hash'])
+             elif 'image_hash' in first_creative: # Check direct hash on creative data
+                  image_hashes.append(first_creative['image_hash'])
+
+
+    if not image_hashes:
+        return json.dumps({"error": "No image hashes found in creative or fallback"}, indent=2)
+
+    print(f"Found image hashes: {image_hashes}")
+    
+    # Fetch image data using the first hash
+    image_endpoint = f"act_{account_id}/adimages"
+    hashes_str = f'["{image_hashes[0]}"]'
+    image_params = {
+        "fields": "hash,url,width,height,name,status",
+        "hashes": hashes_str
+    }
+    
+    print(f"Requesting image data with params: {image_params}")
+    image_data = await make_api_request(image_endpoint, access_token, image_params)
+    
+    if "error" in image_data:
+        return json.dumps({"error": f"Failed to get image data - {json.dumps(image_data)}"}, indent=2)
+    
+    if "data" not in image_data or not image_data["data"]:
+        return json.dumps({"error": "No image data returned from API"}, indent=2)
+        
+    first_image = image_data["data"][0]
+    image_url = first_image.get("url")
+    
+    if not image_url:
+        return json.dumps({"error": "No valid image URL found in API response"}, indent=2)
+        
+    print(f"Downloading image from URL: {image_url}")
+    
+    # Download and Save Image
+    image_bytes = await download_image(image_url)
+    
+    if not image_bytes:
+        return json.dumps({"error": "Failed to download image"}, indent=2)
+        
+    try:
+        # Ensure output directory exists
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            
+        # Create a filename (e.g., using ad_id and image hash)
+        file_extension = ".jpg" # Default extension, could try to infer from headers later
+        filename = f"{ad_id}_{image_hashes[0]}{file_extension}"
+        filepath = os.path.join(output_dir, filename)
+        
+        # Save the image bytes to the file
+        with open(filepath, "wb") as f:
+            f.write(image_bytes)
+            
+        print(f"Image saved successfully to: {filepath}")
+        return json.dumps({"filepath": filepath}, indent=2) # Return JSON with filepath
+
+    except Exception as e:
+        return json.dumps({"error": f"Failed to save image: {str(e)}"}, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
 async def update_ad(
     ad_id: str,
     status: str = None,
@@ -355,3 +483,247 @@ async def update_ad(
     data = await make_api_request(endpoint, access_token, params, method='POST')
 
     return json.dumps(data, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def upload_ad_image(
+    access_token: str = None,
+    account_id: str = None,
+    image_path: str = None,
+    name: str = None
+) -> str:
+    """
+    Upload an image to use in Meta Ads creatives.
+    
+    Args:
+        access_token: Meta API access token (optional - will use cached token if not provided)
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX)
+        image_path: Path to the image file to upload
+        name: Optional name for the image (default: filename)
+    
+    Returns:
+        JSON response with image details including hash for creative creation
+    """
+    # Check required parameters
+    if not account_id:
+        return json.dumps({"error": "No account ID provided"}, indent=2)
+    
+    if not image_path:
+        return json.dumps({"error": "No image path provided"}, indent=2)
+    
+    # Ensure account_id has the 'act_' prefix for API compatibility
+    if not account_id.startswith("act_"):
+        account_id = f"act_{account_id}"
+    
+    # Check if image file exists
+    if not os.path.exists(image_path):
+        return json.dumps({"error": f"Image file not found: {image_path}"}, indent=2)
+    
+    try:
+        # Read image file
+        with open(image_path, "rb") as img_file:
+            image_bytes = img_file.read()
+        
+        # Get image filename if name not provided
+        if not name:
+            name = os.path.basename(image_path)
+        
+        # Prepare the API endpoint for uploading images
+        endpoint = f"{account_id}/adimages"
+        
+        # We need to convert the binary data to base64 for API upload
+        import base64
+        encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+        
+        # Prepare POST parameters
+        params = {
+            "bytes": encoded_image,
+            "name": name
+        }
+        
+        # Make API request to upload the image
+        print(f"Uploading image to Facebook Ad Account {account_id}")
+        data = await make_api_request(endpoint, access_token, params, method="POST")
+        
+        return json.dumps(data, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to upload image",
+            "details": str(e)
+        }, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def create_ad_creative(
+    access_token: str = None,
+    account_id: str = None,
+    name: str = None,
+    image_hash: str = None,
+    page_id: str = None,
+    link_url: str = None,
+    message: str = None,
+    headline: str = None,
+    description: str = None,
+    call_to_action_type: str = None,
+    instagram_actor_id: str = None
+) -> str:
+    """
+    Create a new ad creative using an uploaded image hash.
+    
+    Args:
+        access_token: Meta API access token (optional - will use cached token if not provided)
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX)
+        name: Creative name
+        image_hash: Hash of the uploaded image
+        page_id: Facebook Page ID to be used for the ad
+        link_url: Destination URL for the ad
+        message: Ad copy/text
+        headline: Ad headline
+        description: Ad description
+        call_to_action_type: Call to action button type (e.g., 'LEARN_MORE', 'SIGN_UP', 'SHOP_NOW')
+        instagram_actor_id: Optional Instagram account ID for Instagram placements
+    
+    Returns:
+        JSON response with created creative details
+    """
+    # Check required parameters
+    if not account_id:
+        return json.dumps({"error": "No account ID provided"}, indent=2)
+    
+    if not image_hash:
+        return json.dumps({"error": "No image hash provided"}, indent=2)
+    
+    if not name:
+        name = f"Creative {int(time.time())}"
+    
+    # Ensure account_id has the 'act_' prefix
+    if not account_id.startswith("act_"):
+        account_id = f"act_{account_id}"
+    
+    # If no page ID is provided, try to find a page associated with the account
+    if not page_id:
+        try:
+            # Query to get pages associated with the account
+            pages_endpoint = f"{account_id}/assigned_pages"
+            pages_params = {
+                "fields": "id,name",
+                "limit": 1 
+            }
+            
+            pages_data = await make_api_request(pages_endpoint, access_token, pages_params)
+            
+            if "data" in pages_data and pages_data["data"]:
+                page_id = pages_data["data"][0]["id"]
+                print(f"Using page ID: {page_id} ({pages_data['data'][0].get('name', 'Unknown')})")
+            else:
+                return json.dumps({
+                    "error": "No page ID provided and no pages found for this account",
+                    "suggestion": "Please provide a page_id parameter"
+                }, indent=2)
+        except Exception as e:
+            return json.dumps({
+                "error": "Error finding page for account",
+                "details": str(e),
+                "suggestion": "Please provide a page_id parameter"
+            }, indent=2)
+    
+    # Prepare the creative data
+    creative_data = {
+        "name": name,
+        "object_story_spec": {
+            "page_id": page_id,
+            "link_data": {
+                "image_hash": image_hash,
+                "link": link_url if link_url else "https://facebook.com"
+            }
+        }
+    }
+    
+    # Add optional parameters if provided
+    if message:
+        creative_data["object_story_spec"]["link_data"]["message"] = message
+    
+    if headline:
+        creative_data["object_story_spec"]["link_data"]["name"] = headline
+        
+    if description:
+        creative_data["object_story_spec"]["link_data"]["description"] = description
+    
+    if call_to_action_type:
+        creative_data["object_story_spec"]["link_data"]["call_to_action"] = {
+            "type": call_to_action_type
+        }
+    
+    if instagram_actor_id:
+        creative_data["instagram_actor_id"] = instagram_actor_id
+    
+    # Prepare the API endpoint for creating a creative
+    endpoint = f"{account_id}/adcreatives"
+    
+    try:
+        # Make API request to create the creative
+        data = await make_api_request(endpoint, access_token, creative_data, method="POST")
+        
+        # If successful, get more details about the created creative
+        if "id" in data:
+            creative_id = data["id"]
+            creative_endpoint = f"{creative_id}"
+            creative_params = {
+                "fields": "id,name,status,thumbnail_url,image_url,image_hash,object_story_spec,url_tags,link_url"
+            }
+            
+            creative_details = await make_api_request(creative_endpoint, access_token, creative_params)
+            return json.dumps({
+                "success": True,
+                "creative_id": creative_id,
+                "details": creative_details
+            }, indent=2)
+        
+        return json.dumps(data, indent=2)
+    
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to create ad creative",
+            "details": str(e),
+            "creative_data_sent": creative_data
+        }, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
+async def get_account_pages(access_token: str = None, account_id: str = None) -> str:
+    """
+    Get pages associated with a Meta Ads account.
+    
+    Args:
+        access_token: Meta API access token (optional - will use cached token if not provided)
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX)
+    
+    Returns:
+        JSON response with pages associated with the account
+    """
+    # Check required parameters
+    if not account_id:
+        return json.dumps({"error": "No account ID provided"}, indent=2)
+    
+    # Ensure account_id has the 'act_' prefix
+    if not account_id.startswith("act_"):
+        account_id = f"act_{account_id}"
+    
+    # Get pages associated with the account
+    endpoint = f"{account_id}/assigned_pages"
+    params = {
+        "fields": "id,name,username,category,fan_count,link,verification_status,picture"
+    }
+    
+    try:
+        data = await make_api_request(endpoint, access_token, params)
+        return json.dumps(data, indent=2)
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to get account pages",
+            "details": str(e)
+        }, indent=2)
