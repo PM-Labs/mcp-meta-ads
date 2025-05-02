@@ -106,7 +106,14 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
      - `account_id`: Meta Ads account ID (format: act_XXXXXXXXX)
    - Returns: Detailed information about the specified account
 
-3. `mcp_meta_ads_get_campaigns`
+3. `mcp_meta_ads_get_account_pages`
+   - Get pages associated with a Meta Ads account
+   - Inputs:
+     - `access_token` (optional): Meta API access token (will use cached token if not provided)
+     - `account_id`: Meta Ads account ID (format: act_XXXXXXXXX) or "me" for the current user's pages
+   - Returns: List of pages associated with the account, useful for ad creation and management
+
+4. `mcp_meta_ads_get_campaigns`
    - Get campaigns for a Meta Ads account with optional filtering
    - Inputs:
      - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -115,14 +122,14 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
      - `status_filter`: Filter by status (empty for all, or 'ACTIVE', 'PAUSED', etc.)
    - Returns: List of campaigns matching the criteria
 
-4. `mcp_meta_ads_get_campaign_details`
+5. `mcp_meta_ads_get_campaign_details`
    - Get detailed information about a specific campaign
    - Inputs:
      - `access_token` (optional): Meta API access token (will use cached token if not provided)
      - `campaign_id`: Meta Ads campaign ID
    - Returns: Detailed information about the specified campaign
 
-5. `mcp_meta_ads_create_campaign`
+6. `mcp_meta_ads_create_campaign`
    - Create a new campaign in a Meta Ads account
    - Inputs:
      - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -135,7 +142,7 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
      - `lifetime_budget`: Lifetime budget in account currency (in cents)
    - Returns: Confirmation with new campaign details
 
-6. `mcp_meta_ads_get_adsets`
+7. `mcp_meta_ads_get_adsets`
    - Get ad sets for a Meta Ads account with optional filtering by campaign
    - Inputs:
      - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -144,14 +151,14 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
      - `campaign_id`: Optional campaign ID to filter by
    - Returns: List of ad sets matching the criteria
 
-7. `mcp_meta_ads_get_adset_details`
+8. `mcp_meta_ads_get_adset_details`
    - Get detailed information about a specific ad set
    - Inputs:
      - `access_token` (optional): Meta API access token (will use cached token if not provided)
      - `adset_id`: Meta Ads ad set ID
    - Returns: Detailed information about the specified ad set
 
-8. `mcp_meta_ads_get_ads`
+9. `mcp_meta_ads_get_ads`
    - Get ads for a Meta Ads account with optional filtering
    - Inputs:
      - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -161,28 +168,28 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
      - `adset_id`: Optional ad set ID to filter by
    - Returns: List of ads matching the criteria
 
-9. `mcp_meta_ads_get_ad_details`
-   - Get detailed information about a specific ad
-   - Inputs:
-     - `access_token` (optional): Meta API access token (will use cached token if not provided)
-     - `ad_id`: Meta Ads ad ID
-   - Returns: Detailed information about the specified ad
+10. `mcp_meta_ads_get_ad_details`
+    - Get detailed information about a specific ad
+    - Inputs:
+      - `access_token` (optional): Meta API access token (will use cached token if not provided)
+      - `ad_id`: Meta Ads ad ID
+    - Returns: Detailed information about the specified ad
 
-10. `mcp_meta_ads_get_ad_creatives`
+11. `mcp_meta_ads_get_ad_creatives`
     - Get creative details for a specific ad
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
       - `ad_id`: Meta Ads ad ID
     - Returns: Creative details including text, images, and URLs
 
-11. `mcp_meta_ads_get_ad_image`
+12. `mcp_meta_ads_get_ad_image`
     - Get, download, and visualize a Meta ad image in one step
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
       - `ad_id`: Meta Ads ad ID
     - Returns: The ad image ready for direct visual analysis
 
-12. `mcp_meta_ads_update_ad`
+13. `mcp_meta_ads_update_ad`
     - Update an ad with new settings
     - Inputs:
       - `ad_id`: Meta Ads ad ID
@@ -191,7 +198,7 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
     - Returns: Confirmation with updated ad details and a confirmation link
 
-13. `mcp_meta_ads_update_adset`
+14. `mcp_meta_ads_update_adset`
     - Update an ad set with new settings including frequency caps
     - Inputs:
       - `adset_id`: Meta Ads ad set ID
@@ -203,7 +210,7 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
     - Returns: Confirmation with updated ad set details and a confirmation link
 
-14. `mcp_meta_ads_get_insights`
+15. `mcp_meta_ads_get_insights`
     - Get performance insights for a campaign, ad set, ad or account
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -213,7 +220,7 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
       - `level`: Level of aggregation (ad, adset, campaign, account)
     - Returns: Performance metrics for the specified object
 
-15. `mcp_meta_ads_debug_image_download`
+16. `mcp_meta_ads_debug_image_download`
     - Debug image download issues and report detailed diagnostics
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
@@ -221,7 +228,7 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
       - `ad_id`: Meta Ads ad ID (optional, used if url is not provided)
     - Returns: Diagnostic information about image download attempts
 
-16. `mcp_meta_ads_get_login_link`
+17. `mcp_meta_ads_get_login_link`
     - Get a clickable login link for Meta Ads authentication
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
