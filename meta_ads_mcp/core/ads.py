@@ -709,28 +709,33 @@ async def get_account_pages(access_token: str = None, account_id: str = None) ->
     if not account_id:
         return json.dumps({"error": "No account ID provided"}, indent=2)
     
-    # Ensure account_id has the 'act_' prefix
+    # Handle special case for 'me'
+    if account_id == "me":
+        try:
+            endpoint = "me/accounts"
+            params = {
+                "fields": "id,name,username,category,fan_count,link,verification_status,picture"
+            }
+            
+            user_pages_data = await make_api_request(endpoint, access_token, params)
+            return json.dumps(user_pages_data, indent=2)
+        except Exception as e:
+            return json.dumps({
+                "error": "Failed to get user pages",
+                "details": str(e)
+            }, indent=2)
+    
+    # Ensure account_id has the 'act_' prefix for regular accounts
     if not account_id.startswith("act_"):
         account_id = f"act_{account_id}"
     
     try:
-        # First attempt: Use the client_pages endpoint
-        endpoint = f"{account_id}/client_pages"
-        params = {
-            "fields": "id,name,username,category,fan_count,link,verification_status,picture"
-        }
+        # Try all approaches that might work
         
-        client_pages_data = await make_api_request(endpoint, access_token, params)
-        
-        # If successful with data, return it
-        if "data" in client_pages_data and client_pages_data["data"]:
-            return json.dumps(client_pages_data, indent=2)
-            
-        # Second attempt: Get active ads and extract page IDs
+        # Approach 1: Get active ads and extract page IDs
         endpoint = f"{account_id}/ads"
         params = {
             "fields": "creative{object_story_spec{page_id}}",
-            "status": "ACTIVE",
             "limit": 100
         }
         
@@ -740,10 +745,10 @@ async def get_account_pages(access_token: str = None, account_id: str = None) ->
         page_ids = set()
         if "data" in ads_data:
             for ad in ads_data.get("data", []):
-                if "creative" in ad and "object_story_spec" in ad["creative"] and "page_id" in ad["creative"]["object_story_spec"]:
+                if "creative" in ad and "creative" in ad and "object_story_spec" in ad["creative"] and "page_id" in ad["creative"]["object_story_spec"]:
                     page_ids.add(ad["creative"]["object_story_spec"]["page_id"])
         
-        # Fetch details for each page if we found any
+        # If we found page IDs, get details for each
         if page_ids:
             page_details = {"data": []}
             
@@ -759,45 +764,56 @@ async def get_account_pages(access_token: str = None, account_id: str = None) ->
             
             if page_details["data"]:
                 return json.dumps(page_details, indent=2)
-                
-        # Third attempt: Retrieve the account's client ad accounts
-        endpoint = f"me/adaccounts"
+        
+        # Approach 2: Try client_pages endpoint
+        endpoint = f"{account_id}/client_pages"
         params = {
-            "fields": "id,name,account_id",
-            "limit": 10
+            "fields": "id,name,username,category,fan_count,link,verification_status,picture"
         }
         
-        account_data = await make_api_request(endpoint, access_token, params)
+        client_pages_data = await make_api_request(endpoint, access_token, params)
         
-        # Return whatever we got, even if empty or error
+        if "data" in client_pages_data and client_pages_data["data"]:
+            return json.dumps(client_pages_data, indent=2)
+        
+        # Approach 3: Try promoted_objects endpoint to find page IDs
+        endpoint = f"{account_id}/promoted_objects"
+        params = {
+            "fields": "page_id"
+        }
+        
+        promoted_objects_data = await make_api_request(endpoint, access_token, params)
+        
+        if "data" in promoted_objects_data and promoted_objects_data["data"]:
+            page_ids = set()
+            for obj in promoted_objects_data["data"]:
+                if "page_id" in obj:
+                    page_ids.add(obj["page_id"])
+            
+            if page_ids:
+                page_details = {"data": []}
+                for page_id in page_ids:
+                    page_endpoint = f"{page_id}"
+                    page_params = {
+                        "fields": "id,name,username,category,fan_count,link,verification_status,picture"
+                    }
+                    
+                    page_data = await make_api_request(page_endpoint, access_token, page_params)
+                    if "id" in page_data:
+                        page_details["data"].append(page_data)
+                
+                if page_details["data"]:
+                    return json.dumps(page_details, indent=2)
+        
+        # If all approaches failed, return empty data with a message
         return json.dumps({
-            "message": "Retrieved account data instead of pages",
-            "account_data": account_data
+            "data": [],
+            "message": "No pages found associated with this account",
+            "suggestion": "You may need to create a page or provide a page_id explicitly when creating ads"
         }, indent=2)
         
     except Exception as e:
-        try:
-            # Final fallback - try getting user pages directly
-            endpoint = "me/accounts"
-            params = {
-                "fields": "id,name,username,category,fan_count,link,verification_status,picture,access_token"
-            }
-            
-            user_pages_data = await make_api_request(endpoint, access_token, params)
-            
-            # Return the user's pages if available
-            if "data" in user_pages_data and user_pages_data["data"]:
-                return json.dumps(user_pages_data, indent=2)
-                
-            # If we got here, all attempts failed
-            return json.dumps({
-                "error": "Could not find any pages associated with this account",
-                "details": str(e),
-                "suggestion": "Check if your access token has 'pages_show_list' permission."
-            }, indent=2)
-            
-        except Exception as e2:
-            return json.dumps({
-                "error": "Failed to get any pages after multiple attempts",
-                "details": f"Original error: {str(e)}. Fallback error: {str(e2)}"
-            }, indent=2)
+        return json.dumps({
+            "error": "Failed to get account pages",
+            "details": str(e)
+        }, indent=2)
