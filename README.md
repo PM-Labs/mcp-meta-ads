@@ -67,7 +67,7 @@ python -m meta_ads_mcp --app-id YOUR_META_ADS_APP_ID
 Before using the MCP server, you'll need to set up a Meta Developer App:
 
 1. Go to [Meta for Developers](https://developers.facebook.com/) and create a new app
-2. Choose the "Consumer" app type
+2. Choose the "Business" app type
 3. In your app settings, add the "Marketing API" product
 4. Configure your app's OAuth redirect URI to include `http://localhost:8888/callback`
 5. Note your App ID (Client ID) for use with the MCP
