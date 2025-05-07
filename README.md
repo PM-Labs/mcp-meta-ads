@@ -286,6 +286,17 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
     - Returns: A clickable resource link for Meta authentication
 
+22. `mcp_meta-ads_create_budget_schedule`
+    - Create a budget schedule for a Meta Ads campaign.
+    - Inputs:
+      - `campaign_id`: Meta Ads campaign ID.
+      - `budget_value`: Amount of budget increase.
+      - `budget_value_type`: Type of budget value ("ABSOLUTE" or "MULTIPLIER").
+      - `time_start`: Unix timestamp for when the high demand period should start.
+      - `time_end`: Unix timestamp for when the high demand period should end.
+      - `access_token` (optional): Meta API access token.
+    - Returns: JSON string with the ID of the created budget schedule or an error message.
+
 ## Authentication
 
 The Meta Ads MCP uses Meta's OAuth 2.0 authentication flow, designed for desktop apps:
