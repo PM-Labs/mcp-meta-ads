@@ -104,7 +104,7 @@ async def create_campaign(
         access_token: Meta API access token (optional - will use cached token if not provided)
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         name: Campaign name
-        objective: Campaign objective (AWARENESS, TRAFFIC, ENGAGEMENT, etc.)
+        objective: Campaign objective. Validates ad objectives. enum{BRAND_AWARENESS, LEAD_GENERATION, LINK_CLICKS, CONVERSIONS, OUTCOME_TRAFFIC, etc.}.
         status: Initial campaign status (default: PAUSED)
         special_ad_categories: List of special ad categories if applicable
         daily_budget: Daily budget in account currency (in cents) as a string
