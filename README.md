@@ -8,6 +8,27 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
 
 ![Meta Ads MCP in action: Visualize ad performance metrics and creative details directly in Claude or your favorite MCP client, with rich insights about campaign reach, engagement, and costs](./images/meta-ads-example.png)
 
+## Quick Start
+
+1. Get your Pipeboard token at [pipeboard.co](https://pipeboard.co)
+2. Add this configuration to your MCP client:
+
+```json
+"mcpServers": {
+  "meta-ads": {
+    "command": "uvx",
+    "args": ["meta-ads-mcp"],
+    "env": {
+      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Get your token at https://pipeboard.co
+    }
+  }
+}
+```
+
+That's it! You can now use Meta Ads MCP in your favorite MCP client.
+
+> **Note**: If you prefer to use your own Meta Developer App instead of Pipeboard authentication, see [CUSTOM_META_APP.md](CUSTOM_META_APP.md) for instructions.
+
 ## Features
 
 - **AI-Powered Campaign Analysis**: Let your favorite LLM analyze your campaigns and provide actionable insights on performance
@@ -21,56 +42,80 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
 - **Simple Authentication**: Easy setup with secure OAuth authentication
 - **Cross-Platform Support**: Works on Windows, macOS, and Linux
 
-## Installation
+## Advanced Setup
 
-### Using uv (recommended)
+### Development Installation
 
-When using uv no specific installation is needed. We can use uvx to directly run meta-ads-mcp:
-
-```bash
-# Run with Meta authentication
-uvx meta-ads-mcp --app-id YOUR_META_ADS_APP_ID
-```
-
-If you want to install the package:
-
-```bash
-uv pip install meta-ads-mcp
-```
-
-For development (if you've cloned the repository):
+If you're contributing to the project or need to run it directly:
 
 ```bash
 # From the repository root
 uv pip install -e .
 ```
 
-### Using pip
+## Privacy and Security
 
-Alternatively, you can install meta-ads-mcp via pip:
+The Meta Ads MCP follows security best practices:
 
-```bash
-pip install meta-ads-mcp
-```
+1. Tokens are cached in a platform-specific secure location:
+   - Windows: `%APPDATA%\meta-ads-mcp\token_cache.json`
+   - macOS: `~/Library/Application Support/meta-ads-mcp/token_cache.json`
+   - Linux: `~/.config/meta-ads-mcp/token_cache.json`
 
-After installation, you can run it as:
+2. You do not need to provide your access token for each command; it will be automatically retrieved from the cache.
 
-```bash
-# Run with Meta authentication
-python -m meta_ads_mcp --app-id YOUR_META_ADS_APP_ID
-```
+## Testing
+
+### LLM Interface Testing
+
+When using the Meta Ads MCP with an LLM interface (like Claude):
+
+1. Ensure the PIPEBOARD_API_TOKEN environment variable is set
+2. Verify account access by calling `mcp_meta_ads_get_ad_accounts`
+3. Check specific account details with `mcp_meta_ads_get_account_info`
+
+## Troubleshooting
+
+### Authentication Issues
+
+If you encounter authentication issues:
+
+1. Verify your Pipeboard setup:
+   - Check that `PIPEBOARD_API_TOKEN` is set correctly
+   - Verify your token in the Pipeboard dashboard
+   - Try forcing a new login: `python test_pipeboard_auth.py --force-login`
+
+2. When using the LLM interface:
+   - Ensure the PIPEBOARD_API_TOKEN environment variable is set
+   - Check that the callback server is running properly
+
+### API Errors
+
+If you receive errors from the Meta API:
+1. Ensure the user has appropriate permissions on the ad accounts
+2. Check if there are rate limits or other restrictions
+3. Verify your Pipeboard token hasn't expired
+
+## Log Location
+
+Log files are stored in a platform-specific location:
+
+- **macOS**: `~/Library/Application Support/meta-ads-mcp/meta_ads_debug.log`
+- **Windows**: `%APPDATA%\meta-ads-mcp\meta_ads_debug.log` 
+- **Linux**: `~/.config/meta-ads-mcp/meta_ads_debug.log` 
 
 ## Configuration
 
-### Create a Meta Developer App (Required)
+### Pipeboard Authentication
 
-Before using the MCP server, you'll need to set up a Meta Developer App:
+The easiest way to use Meta Ads MCP is with Pipeboard authentication:
 
-1. Go to [Meta for Developers](https://developers.facebook.com/) and create a new app
-2. Choose the "Business" app type
-3. In your app settings, add the "Marketing API" product
-4. Configure your app's OAuth redirect URI to include `http://localhost:8888/callback`
-5. Note your App ID (Client ID) for use with the MCP
+1. Sign up at [Pipeboard.co](https://pipeboard.co) and generate an API token
+2. Set the environment variable:
+   ```bash
+   export PIPEBOARD_API_TOKEN=your_pipeboard_token
+   ```
+3. Run meta-ads-mcp - it will handle authentication automatically
 
 ### Usage with Cursor or Claude Desktop
 
@@ -80,7 +125,10 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
 "mcpServers": {
   "meta-ads": {
     "command": "uvx",
-    "args": ["meta-ads-mcp", "--app-id", "YOUR_META_ADS_APP_ID"]
+    "args": ["meta-ads-mcp"],
+    "env": {
+      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Get your token at https://pipeboard.co
+    }
   }
 }
 ```
@@ -296,157 +344,3 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
       - `time_end`: Unix timestamp for when the high demand period should end.
       - `access_token` (optional): Meta API access token.
     - Returns: JSON string with the ID of the created budget schedule or an error message.
-
-## Authentication
-
-The Meta Ads MCP uses Meta's OAuth 2.0 authentication flow, designed for desktop apps:
-
-When authenticating, it will:
-
-1. Start a local callback server on your machine
-2. Open a browser window to authenticate with Meta
-3. Ask you to authorize the app
-4. Redirect back to the local server to extract and store the token securely
-
-This method requires you to [create a Meta Developer App](#create-a-meta-developer-app) as described above.
-
-## Troubleshooting and Logging
-
-The Meta Ads MCP includes a comprehensive logging system to help troubleshoot issues:
-
-### Log Location
-
-Log files are stored in a platform-specific location:
-
-- **macOS**: `~/Library/Application Support/meta-ads-mcp/meta_ads_debug.log`
-- **Windows**: `%APPDATA%\meta-ads-mcp\meta_ads_debug.log` 
-- **Linux**: `~/.config/meta-ads-mcp/meta_ads_debug.log`
-
-### Common Issues
-
-#### Authentication Issues
-
-If you encounter errors like `(#200) Provide valid app ID`, check the following:
-- Ensure you've set up a Meta Developer App correctly
-- Verify that you're passing the correct App ID using one of these methods:
-  - Set the `META_APP_ID` environment variable: `export META_APP_ID=your_app_id`
-  - Pass it as a command-line argument: `meta-ads-mcp --app-id your_app_id`
-
-#### API Errors
-
-If you receive errors from the Meta API:
-
-1. Verify your app has the Marketing API product added
-2. Ensure the user has appropriate permissions on the ad accounts
-3. Check if there are rate limits or other restrictions on your app
-
-### Debugging Command
-
-For specific image download issues, use the built-in diagnostic tool:
-
-```python
-# Using direct tool call
-mcp_meta_ads_debug_image_download(ad_id="your_ad_id")
-```
-
-This will give you detailed information about the download process and potential issues.
-
-## Running with Different App IDs
-
-If you need to use different Meta App IDs for different purposes:
-
-```bash
-# Using environment variable
-export META_APP_ID=your_app_id
-uvx meta-ads-mcp
-
-# Or using command line argument
-uvx meta-ads-mcp --app-id=your_app_id
-```
-
-## Privacy and Security
-
-The Meta Ads MCP follows security best practices:
-
-1. Tokens are cached in a platform-specific secure location:
-   - Windows: `%APPDATA%\meta-ads-mcp\token_cache.json`
-   - macOS: `~/Library/Application Support/meta-ads-mcp/token_cache.json`
-   - Linux: `~/.config/meta-ads-mcp/token_cache.json`
-
-2. You do not need to provide your access token for each command; it will be automatically retrieved from the cache.
-
-3. You can set the `META_APP_ID` environment variable instead of passing it as an argument:
-   ```bash
-   export META_APP_ID=your_app_id
-   uvx meta-ads-mcp
-   ```
-
-4. You can provide a direct access token using the `META_ACCESS_TOKEN` environment variable. This bypasses both the local token cache and the Pipeboard authentication method:
-   ```bash
-   export META_ACCESS_TOKEN=your_access_token
-   uvx meta-ads-mcp
-   ```
-   This is useful for CI/CD pipelines or when you already have a valid access token from another source.
-
-## Testing
-
-### CLI Testing
-
-Run the test script to verify authentication and basic functionality:
-
-```bash
-python test_meta_ads_auth.py --app-id YOUR_APP_ID
-```
-
-Use the `--force-login` flag to force a new authentication even if a cached token exists:
-
-```bash
-python test_meta_ads_auth.py --app-id YOUR_APP_ID --force-login
-```
-
-### LLM Interface Testing
-
-When using the Meta Ads MCP with an LLM interface (like Claude):
-
-1. Test authentication by calling the `mcp_meta_ads_get_login_link` tool
-2. Verify account access by calling `mcp_meta_ads_get_ad_accounts`
-3. Check specific account details with `mcp_meta_ads_get_account_info`
-
-These functions will automatically handle authentication if needed and provide a clickable login link if required.
-
-## Troubleshooting
-
-### Authentication Issues
-
-If you encounter authentication issues:
-
-1. When using the LLM interface:
-   - Use the `mcp_meta_ads_get_login_link` tool to generate a fresh authentication link
-   - Ensure you click the link and complete the authorization flow in your browser
-   - Check that the callback server is running properly (the tool will report this)
-
-2. When using direct Meta OAuth:
-   - Run with `--force-login` to get a fresh token: `uvx meta-ads-mcp --login --app-id YOUR_APP_ID --force-login`
-   - Make sure the terminal has permissions to open a browser window
-
-3. Skip authentication entirely by providing a token directly:
-   - If you already have a valid access token, you can bypass the authentication flow:
-   - `export META_ACCESS_TOKEN=your_access_token`
-   - This will ignore both the local token cache and the Pipeboard authentication
-
-### API Errors
-
-If you receive errors from the Meta API:
-
-1. Verify your app has the Marketing API product added
-2. Ensure the user has appropriate permissions on the ad accounts
-3. Check if there are rate limits or other restrictions on your app
-
-## Versioning
-
-You can check the current version of the package:
-
-```python
-import meta_ads_mcp
-print(meta_ads_mcp.__version__)
-``` 
