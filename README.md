@@ -10,8 +10,9 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
 
 ## Quick Start
 
-1. Get your Pipeboard token at [pipeboard.co](https://pipeboard.co)
-2. Add this configuration to your MCP client:
+1. Sign-up to [Pipeboard](https://pipeboard.co) to authenticate with Meta (alternatively, you can setup your own [custom meta app](CUSTOM_META_APP.md))
+2. Get your Pipeboard token at [pipeboard.co/api-tokens](https://pipeboard.co/api-tokens) 
+3. Add this configuration to your MCP client:
 
 ```json
 "mcpServers": {
@@ -19,7 +20,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
     "command": "uvx",
     "args": ["meta-ads-mcp"],
     "env": {
-      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Get your token at https://pipeboard.co
+      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Get your token at https://pipeboard.co/api-tokens
     }
   }
 }
