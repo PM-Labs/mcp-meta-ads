@@ -767,7 +767,7 @@ async def get_account_info(access_token: str = None, account_id: str = None) -> 
 
 @mcp_server.tool()
 @meta_api_tool
-async def get_campaigns(access_token: str = None, account_id: str = None, limit: int = 10, status_filter: str = "") -> str:
+async def get_campaigns(access_token: str = None, account_id: str = None, limit: int = 10, status_filter: str = "", after: str = "") -> str:
     """
     Get campaigns for a Meta Ads account with optional filtering.
     
@@ -776,6 +776,7 @@ async def get_campaigns(access_token: str = None, account_id: str = None, limit:
         account_id: Meta Ads account ID (format: act_XXXXXXXXX)
         limit: Maximum number of campaigns to return (default: 10)
         status_filter: Filter by status (empty for all, or 'ACTIVE', 'PAUSED', etc.)
+        after: Pagination cursor to get the next set of results
     """
     # If no account ID is specified, try to get the first one for the user
     if not account_id:
@@ -795,6 +796,9 @@ async def get_campaigns(access_token: str = None, account_id: str = None, limit:
     
     if status_filter:
         params["effective_status"] = [status_filter]
+    
+    if after:
+        params["after"] = after
     
     data = await make_api_request(endpoint, access_token, params)
     
