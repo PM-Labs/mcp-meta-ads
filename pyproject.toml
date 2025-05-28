@@ -7,7 +7,7 @@ name = "meta-ads-mcp"
 version = "0.3.6"
 description = "Model Calling Protocol (MCP) plugin for interacting with Meta Ads API"
 readme = "README.md"
-requires-python = ">=3.9.6"
+requires-python = ">=3.10"
 authors = [
     {name = "Yves Junqueira", email = "yves.junqueira@gmail.com"},
 ]
