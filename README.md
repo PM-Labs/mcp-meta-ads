@@ -8,6 +8,11 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
 
 ![Meta Ads MCP in action: Visualize ad performance metrics and creative details directly in Claude or your favorite MCP client, with rich insights about campaign reach, engagement, and costs](./images/meta-ads-example.png)
 
+## Community & Support
+
+- [Discord](https://discord.gg/hNxpJcqM52). Join the community.
+- [Email Support](info@pipeboard.co). Email us for support.
+  
 ## Quick Start
 
 1. Sign-up to [Pipeboard](https://pipeboard.co) to authenticate with Meta (alternatively, you can setup your own [custom meta app](CUSTOM_META_APP.md))
