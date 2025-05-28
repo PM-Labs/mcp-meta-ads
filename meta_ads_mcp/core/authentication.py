@@ -116,7 +116,7 @@ async def get_login_link(access_token: str = None) -> str:
             "authentication_method": "meta_oauth",
             "token_exchange_message": f"Your authentication token will be valid for approximately {token_duration}." + 
                                     (" Long-lived token exchange is enabled." if token_exchange_supported else 
-                                    " To enable long-lived tokens (60 days), set the META_APP_SECRET environment variable."),
+                                    " For direct Meta authentication, long-lived tokens require META_APP_SECRET. Consider using Pipeboard authentication instead (60-day tokens by default)."),
             "note": "After authenticating, the token will be automatically saved."
         }
         

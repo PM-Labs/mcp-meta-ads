@@ -206,6 +206,9 @@ def meta_api_tool(func):
                         if (auth_manager.app_id == "YOUR_META_APP_ID" or not auth_manager.app_id) and not auth_manager.use_pipeboard:
                             logger.error("TOKEN VALIDATION FAILED: No valid app_id configured")
                             logger.error("Please set META_APP_ID environment variable or configure in your code")
+                        elif auth_manager.use_pipeboard:
+                            logger.error("TOKEN VALIDATION FAILED: Pipeboard authentication enabled but no valid token available")
+                            logger.error("Complete authentication via Pipeboard service or check PIPEBOARD_API_TOKEN")
                         else:
                             logger.error("Check logs above for detailed token validation failures")
                 except Exception as e:
@@ -221,16 +224,21 @@ def meta_api_tool(func):
                 # Add more specific troubleshooting information
                 auth_url = auth_manager.get_auth_url()
                 app_id = auth_manager.app_id
+                using_pipeboard = auth_manager.use_pipeboard
                 
                 logger.error("TOKEN VALIDATION SUMMARY:")
                 logger.error(f"- Current app_id: '{app_id}'")
                 logger.error(f"- Environment META_APP_ID: '{os.environ.get('META_APP_ID', 'Not set')}'")
                 logger.error(f"- Pipeboard API token configured: {'Yes' if os.environ.get('PIPEBOARD_API_TOKEN') else 'No'}")
+                logger.error(f"- Using Pipeboard authentication: {'Yes' if using_pipeboard else 'No'}")
                 
-                # Check for common configuration issues
-                if app_id == "YOUR_META_APP_ID" or not app_id:
+                # Check for common configuration issues - but only if not using Pipeboard
+                if not using_pipeboard and (app_id == "YOUR_META_APP_ID" or not app_id):
                     logger.error("ISSUE DETECTED: No valid Meta App ID configured")
                     logger.error("ACTION REQUIRED: Set META_APP_ID environment variable with a valid App ID")
+                elif using_pipeboard:
+                    logger.error("ISSUE DETECTED: Pipeboard authentication configured but no valid token available")
+                    logger.error("ACTION REQUIRED: Complete authentication via Pipeboard service")
                 
                 return json.dumps({
                     "error": {

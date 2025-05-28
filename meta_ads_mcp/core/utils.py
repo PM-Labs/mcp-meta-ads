@@ -24,9 +24,13 @@ using_pipeboard = bool(os.environ.get("PIPEBOARD_API_TOKEN", ""))
 # Print warning if Meta app credentials are not configured and not using Pipeboard
 if not using_pipeboard:
     if not META_APP_ID:
-        print("WARNING: META_APP_ID environment variable is not set. Authentication will not work properly.")
+        print("WARNING: META_APP_ID environment variable is not set.")
+        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.")
+        print("ALTERNATIVE: For direct Meta authentication, set META_APP_ID to your Meta App ID.")
     if not META_APP_SECRET:
-        print("WARNING: META_APP_SECRET environment variable is not set. Long-lived token exchange will not work.")
+        print("WARNING: META_APP_SECRET environment variable is not set.")
+        print("NOTE: This is only needed for direct Meta authentication. Pipeboard authentication doesn't require this.")
+        print("RECOMMENDED: Use Pipeboard authentication by setting PIPEBOARD_API_TOKEN instead.")
 
 # Configure logging to file
 def setup_logging():
