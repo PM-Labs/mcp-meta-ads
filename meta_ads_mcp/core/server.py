@@ -37,13 +37,33 @@ def main():
     logger.info(f"Args: {sys.argv}")
     
     # Initialize argument parser
-    parser = argparse.ArgumentParser(description="Meta Ads MCP Server")
+    parser = argparse.ArgumentParser(
+        description="Meta Ads MCP Server - Model Context Protocol server for Meta Ads API",
+        epilog="For more information, see https://github.com/pipeboard-co/meta-ads-mcp"
+    )
     parser.add_argument("--login", action="store_true", help="Authenticate with Meta and store the token")
     parser.add_argument("--app-id", type=str, help="Meta App ID (Client ID) for authentication")
     parser.add_argument("--version", action="store_true", help="Show the version of the package")
     
+    # Transport configuration arguments
+    parser.add_argument("--transport", type=str, choices=["stdio", "streamable-http"], 
+                       default="stdio", 
+                       help="Transport method: 'stdio' for MCP clients (default), 'streamable-http' for HTTP API access")
+    parser.add_argument("--port", type=int, default=8080, 
+                       help="Port for Streamable HTTP transport (default: 8080, only used with --transport streamable-http)")
+    parser.add_argument("--host", type=str, default="localhost", 
+                       help="Host for Streamable HTTP transport (default: localhost, only used with --transport streamable-http)")
+    parser.add_argument("--sse-response", action="store_true", 
+                       help="Use SSE response format instead of JSON (default: JSON, only used with --transport streamable-http)")
+    
     args = parser.parse_args()
     logger.info(f"Parsed args: login={args.login}, app_id={args.app_id}, version={args.version}")
+    logger.info(f"Transport args: transport={args.transport}, port={args.port}, host={args.host}, sse_response={args.sse_response}")
+    
+    # Validate CLI argument combinations
+    if args.transport == "stdio" and (args.port != 8080 or args.host != "localhost" or args.sse_response):
+        logger.warning("HTTP transport arguments (--port, --host, --sse-response) are ignored when using stdio transport")
+        print("Warning: HTTP transport arguments are ignored when using stdio transport")
     
     # Update app ID if provided as environment variable or command line arg
     from .auth import auth_manager, meta_config
@@ -123,6 +143,27 @@ def main():
                 logger.error(f"Error initiating browser-based authentication: {e}")
                 print(f"Error: Could not start authentication: {e}")
     
-    # Initialize and run the server
-    logger.info("Starting MCP server with stdio transport")
-    mcp_server.run(transport='stdio') 
+    # Transport-specific server initialization and startup
+    if args.transport == "streamable-http":
+        logger.info(f"Starting MCP server with Streamable HTTP transport on {args.host}:{args.port}")
+        logger.info("Mode: Stateless (no session persistence)")
+        logger.info(f"Response format: {'SSE' if args.sse_response else 'JSON'}")
+        logger.info("Primary auth method: Pipeboard API Token (recommended)")
+        logger.info("Fallback auth method: Custom Meta App OAuth (complex setup)")
+        
+        print(f"Starting Meta Ads MCP server with Streamable HTTP transport")
+        print(f"Server will listen on {args.host}:{args.port}")
+        print(f"Response format: {'SSE' if args.sse_response else 'JSON'}")
+        print("Primary authentication: Pipeboard API Token (via X-PIPEBOARD-API-TOKEN header)")
+        print("Fallback authentication: Custom Meta App OAuth (via X-META-APP-ID header)")
+        
+        # TODO: Initialize Streamable HTTP server configuration
+        # This will be implemented in the next phase
+        logger.error("Streamable HTTP transport not yet implemented")
+        print("Error: Streamable HTTP transport is not yet implemented.")
+        print("Please use --transport stdio (default) for now.")
+        return 1
+    else:
+        # Default stdio transport
+        logger.info("Starting MCP server with stdio transport")
+        mcp_server.run(transport='stdio') 
