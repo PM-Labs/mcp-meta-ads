@@ -18,7 +18,6 @@ mcp_server = FastMCP("meta-ads", use_consistent_tool_format=True)
 mcp_server.resource(uri="meta-ads://resources")(list_resources)
 mcp_server.resource(uri="meta-ads://images/{resource_id}")(get_resource)
 
-
 def login_cli():
     """
     Command-line function to authenticate with Meta

@@ -1,27 +1,29 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-Debug script to verify token flow between pipeboard_auth_manager and the meta_api_tool wrapper.
-This script will help us understand how tokens are being passed and used throughout the system.
+Debugging for auth flow by manually running token retrieval steps.
 """
 
+import asyncio
+import json
+import logging
 import os
 import sys
-import json
-import asyncio
-import logging
-import inspect
-from pprint import pprint
+import requests
+import time
+from pathlib import Path
 
-# Set up logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("token_flow_debug")
+# Configure logging with debug level
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Import the auth modules and API functions
-from meta_ads_mcp.core.pipeboard_auth import pipeboard_auth_manager, PIPEBOARD_API_BASE
-from meta_ads_mcp.api import get_ad_accounts, auth_manager, get_current_access_token, meta_api_tool, needs_authentication
+# Add the package to Python path for development
+sys.path.insert(0, '.')
+
+# Import from the package core modules
+from meta_ads_mcp.core.accounts import get_ad_accounts
+from meta_ads_mcp.core.auth import auth_manager, get_current_access_token, needs_authentication
+from meta_ads_mcp.core.api import meta_api_tool
+from meta_ads_mcp.core.pipeboard_auth import pipeboard_auth_manager
 
 # Get the original get_ad_accounts function before it's wrapped
 original_get_ad_accounts = None
@@ -41,7 +43,7 @@ async def debug_token_flow():
         return
     
     print(f"Using Pipeboard API token: {api_token[:5]}...")
-    print(f"Pipeboard API base URL: {PIPEBOARD_API_BASE}")
+    print(f"Pipeboard API base URL: https://pipeboard.co/api")
     
     # 2. Get token from pipeboard_auth_manager
     print("\n--- Step 1: Get token from pipeboard_auth_manager ---")

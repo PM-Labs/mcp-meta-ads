@@ -1,27 +1,28 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
-A modified version of the meta_api_tool wrapper function with enhanced debugging
-to understand how tokens are managed.
+Debug version of Meta API tool to diagnose authentication and API call issues.
 """
 
-import os
 import asyncio
 import json
 import logging
-import inspect
+import os
+import sys
 from functools import wraps
 from typing import Any, Dict, Optional
 
-# Set up logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger("meta_api_wrapper_debug")
+# Configure logging with debug level
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-# Import needed components
+# Add the package to Python path for development
+sys.path.insert(0, '.')
+
+# Import from the package
 from meta_ads_mcp.core.pipeboard_auth import pipeboard_auth_manager
-from meta_ads_mcp.api import get_ad_accounts
+from meta_ads_mcp.core.accounts import get_ad_accounts
+from meta_ads_mcp.core.auth import auth_manager, get_current_access_token, needs_authentication
+from meta_ads_mcp.core.api import meta_api_tool
 
 # Flag to track if authentication is needed
 needs_authentication = False

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Test script for Meta Ads MCP authentication flow via Pipeboard.co.
 This script shows how to authenticate with the Meta Ads API via Pipeboard.co and run a simple command.
@@ -13,6 +13,8 @@ import requests
 import logging
 import inspect
 import socket
+import time
+from pathlib import Path
 
 # Set up logging
 logging.basicConfig(
@@ -21,13 +23,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("meta_ads_debug")
 
-# Import only pipeboard auth manager to avoid META_APP_ID/META_APP_SECRET warnings
-from meta_ads_mcp.core.pipeboard_auth import pipeboard_auth_manager, PIPEBOARD_API_BASE
-from meta_ads_mcp.api import get_ad_accounts
+# Add the package to Python path for development
+sys.path.insert(0, '.')
+
+# Import components from the meta_ads_mcp package core modules
+from meta_ads_mcp.core.pipeboard_auth import pipeboard_auth_manager
+from meta_ads_mcp.core.accounts import get_ad_accounts
+from meta_ads_mcp.core.auth import auth_manager
 
 # Define Meta Graph API base URL for testing access token directly
-META_GRAPH_API_VERSION = "v22.0"
-META_GRAPH_API_BASE = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}"
+META_GRAPH_API_BASE = "https://graph.facebook.com/v22.0"
+PIPEBOARD_API_BASE = "https://pipeboard.co/api"
 
 def test_server_connectivity(server_url, port=3000):
     """Test if the Pipeboard server is reachable and identify network issues"""
