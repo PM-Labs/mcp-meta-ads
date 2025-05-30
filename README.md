@@ -139,6 +139,10 @@ Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cu
 }
 ```
 
+## Transports
+
+Meta Ads MCP uses **stdio transport** by default, which works with MCP clients like Claude Desktop and Cursor. For web applications and direct HTTP API access, see [STREAMABLE_HTTP_SETUP.md](STREAMABLE_HTTP_SETUP.md) for streamable HTTP transport configuration.
+
 ### Available MCP Tools
 
 1. `mcp_meta_ads_get_ad_accounts`
