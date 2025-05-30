@@ -5,6 +5,8 @@ import argparse
 import os
 import sys
 import webbrowser
+import json
+from typing import Dict, Any, Optional
 from .auth import login as login_auth
 from .resources import list_resources, get_resource
 from .utils import logger
@@ -17,6 +19,175 @@ mcp_server = FastMCP("meta-ads", use_consistent_tool_format=True)
 # Register resource URIs
 mcp_server.resource(uri="meta-ads://resources")(list_resources)
 mcp_server.resource(uri="meta-ads://images/{resource_id}")(get_resource)
+
+
+class StreamableHTTPHandler:
+    """Handles stateless Streamable HTTP requests for Meta Ads MCP"""
+    
+    def __init__(self):
+        """Initialize handler with no session storage - all auth per request"""
+        logger.info("StreamableHTTPHandler initialized for stateless operation")
+        
+    def handle_request(self, request_headers: Dict[str, str], request_body: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle individual request with authentication
+        
+        Args:
+            request_headers: HTTP request headers
+            request_body: JSON-RPC request body
+            
+        Returns:
+            JSON response with auth status and any tool results
+        """
+        logger.info(f"Handling request with headers: {list(request_headers.keys())}")
+        
+        try:
+            # Extract authentication configuration from headers
+            auth_config = self.get_auth_config_from_headers(request_headers)
+            logger.info(f"Auth method detected: {auth_config['auth_method']}")
+            
+            # Handle based on auth method
+            if auth_config['auth_method'] == 'pipeboard':
+                return self.handle_pipeboard_request(auth_config, request_body)
+            elif auth_config['auth_method'] == 'custom_meta_app':
+                return self.handle_custom_app_request(auth_config, request_body)
+            else:
+                return self.handle_unauthenticated_request(request_body)
+                
+        except Exception as e:
+            logger.error(f"Error handling request: {e}")
+            return {
+                'jsonrpc': '2.0',
+                'error': {
+                    'code': -32603,
+                    'message': 'Internal error',
+                    'data': str(e)
+                },
+                'id': request_body.get('id')
+            }
+    
+    def get_auth_config_from_headers(self, request_headers: Dict[str, str]) -> Dict[str, Any]:
+        """Extract authentication configuration from HTTP headers
+        
+        Args:
+            request_headers: HTTP request headers
+            
+        Returns:
+            Dictionary with auth method and relevant credentials
+        """
+        # Security validation - only allow safe headers
+        ALLOWED_VIA_HEADERS = {
+            'pipeboard_api_token': True,   # ✅ Primary method - simple and secure
+            'meta_app_id': True,           # ✅ Fallback only - triggers OAuth complexity
+            'meta_app_secret': False,      # ❌ Server environment only
+            'meta_access_token': False,    # ❌ Use proper auth flows instead
+        }
+        
+        # PRIMARY: Check for Pipeboard token (handles 90%+ of cases)
+        pipeboard_token = request_headers.get('X-PIPEBOARD-API-TOKEN') or request_headers.get('x-pipeboard-api-token')
+        if pipeboard_token:
+            logger.info("Pipeboard authentication detected (primary path)")
+            return {
+                'auth_method': 'pipeboard',
+                'pipeboard_api_token': pipeboard_token,
+                'requires_oauth': False  # Simple token-based auth
+            }
+        
+        # FALLBACK: Custom Meta app (minority of users)
+        meta_app_id = request_headers.get('X-META-APP-ID') or request_headers.get('x-meta-app-id')
+        if meta_app_id:
+            logger.info("Custom Meta app authentication detected (fallback path)")
+            return {
+                'auth_method': 'custom_meta_app',
+                'meta_app_id': meta_app_id,
+                'requires_oauth': True  # Complex OAuth flow required
+            }
+        
+        # No authentication provided
+        logger.warning("No authentication method detected in headers")
+        return {
+            'auth_method': 'none',
+            'requires_oauth': False
+        }
+    
+    def handle_pipeboard_request(self, auth_config: Dict[str, Any], request_body: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle request with Pipeboard token (primary path)
+        
+        Args:
+            auth_config: Authentication configuration from headers
+            request_body: JSON-RPC request body
+            
+        Returns:
+            JSON response ready for tool execution
+        """
+        logger.info("Processing Pipeboard authenticated request")
+        token = auth_config['pipeboard_api_token']
+        
+        # Token is ready to use immediately for API calls
+        # TODO: In next phases, this will execute the actual tool call
+        return {
+            'jsonrpc': '2.0',
+            'result': {
+                'status': 'ready',
+                'auth_method': 'pipeboard',
+                'message': 'Authentication successful with Pipeboard token',
+                'token_source': 'pipeboard_header'
+            },
+            'id': request_body.get('id')
+        }
+    
+    def handle_custom_app_request(self, auth_config: Dict[str, Any], request_body: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle request with custom Meta app (fallback path)
+        
+        Args:
+            auth_config: Authentication configuration from headers
+            request_body: JSON-RPC request body
+            
+        Returns:
+            JSON response indicating OAuth flow is required
+        """
+        logger.info("Processing custom Meta app request (OAuth required)")
+        
+        # This may require OAuth flow initiation
+        # Each request is independent - no session state
+        return {
+            'jsonrpc': '2.0',
+            'result': {
+                'status': 'oauth_required',
+                'auth_method': 'custom_meta_app',
+                'meta_app_id': auth_config['meta_app_id'],
+                'message': 'OAuth flow required for custom Meta app authentication',
+                'next_steps': 'Use get_login_link tool to initiate OAuth flow'
+            },
+            'id': request_body.get('id')
+        }
+    
+    def handle_unauthenticated_request(self, request_body: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle request with no authentication
+        
+        Args:
+            request_body: JSON-RPC request body
+            
+        Returns:
+            JSON error response requesting authentication
+        """
+        logger.warning("Unauthenticated request received")
+        
+        return {
+            'jsonrpc': '2.0',
+            'error': {
+                'code': -32600,
+                'message': 'Authentication required',
+                'data': {
+                    'supported_methods': [
+                        'X-PIPEBOARD-API-TOKEN: Pipeboard token (recommended)',
+                        'X-META-APP-ID: Custom Meta app OAuth (advanced users)'
+                    ],
+                    'documentation': 'https://github.com/pipeboard-co/meta-ads-mcp'
+                }
+            },
+            'id': request_body.get('id')
+        }
+
 
 def login_cli():
     """
@@ -157,12 +328,34 @@ def main():
         print("Primary authentication: Pipeboard API Token (via X-PIPEBOARD-API-TOKEN header)")
         print("Fallback authentication: Custom Meta App OAuth (via X-META-APP-ID header)")
         
-        # TODO: Initialize Streamable HTTP server configuration
-        # This will be implemented in the next phase
-        logger.error("Streamable HTTP transport not yet implemented")
-        print("Error: Streamable HTTP transport is not yet implemented.")
-        print("Please use --transport stdio (default) for now.")
-        return 1
+        # Create server with stateless configuration
+        global mcp_server
+        mcp_server = FastMCP(
+            name="meta-ads",
+            host=args.host,  # Pass host as setting
+            port=args.port   # Pass port as setting
+        )
+        
+        # Re-register resources and tools for HTTP transport
+        mcp_server.resource(uri="meta-ads://resources")(list_resources)
+        mcp_server.resource(uri="meta-ads://images/{resource_id}")(get_resource)
+        
+        # Import all tool modules to register them with the new server instance
+        logger.info("Re-registering all tools for HTTP transport")
+        from . import accounts, campaigns, adsets, ads, insights, authentication
+        from . import ads_library, budget_schedules
+        
+        # Initialize HTTP handler for request processing
+        http_handler = StreamableHTTPHandler()
+        
+        # Start the FastMCP server with Streamable HTTP transport
+        try:
+            logger.info("Starting FastMCP server with Streamable HTTP transport")
+            mcp_server.run(transport="streamable-http")
+        except Exception as e:
+            logger.error(f"Error starting Streamable HTTP server: {e}")
+            print(f"Error: Failed to start Streamable HTTP server: {e}")
+            return 1
     else:
         # Default stdio transport
         logger.info("Starting MCP server with stdio transport")
