@@ -28,3 +28,5 @@ debug/
 
 # Keep organized directories but exclude some debug content
 !debug/README.md
+
+internal/
