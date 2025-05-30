@@ -4,35 +4,27 @@ This repository uses GitHub Actions to automatically publish releases to PyPI. H
 
 ## Automated Publishing
 
-### Setup Required
+### Setup Status
 
-1. **Configure Trusted Publishing on PyPI** (Recommended):
-   - Go to your PyPI project page: https://pypi.org/manage/project/meta-ads-mcp/
-   - Navigate to "Publishing" → "Add a new pending publisher"
-   - Fill in the details:
-     - Owner: `nictuku` (your GitHub username/org)
-     - Repository name: `meta-ads-mcp`
-     - Workflow name: `publish.yml`
-     - Environment name: `release`
-   
-   This eliminates the need for API tokens and is more secure.
-
-2. **Alternative: API Token Method**:
-   - If you prefer using API tokens, go to PyPI → Account Settings → API tokens
-   - Create a token with scope limited to this project
-   - Add it as a repository secret named `PYPI_API_TOKEN`
-   - Modify `.github/workflows/publish.yml` to use the token instead of trusted publishing
+✅ **Trusted Publishing Configured**: The repository is already set up with PyPI trusted publishing using the `release` environment.
 
 ### Creating a Release
 
-1. **Update the version** in `pyproject.toml`:
+1. **Update the version** in both files:
+   
+   In `pyproject.toml`:
    ```toml
    version = "0.3.8"  # Increment as needed
    ```
+   
+   In `meta_ads_mcp/__init__.py`:
+   ```python
+   __version__ = "0.3.8"  # Must match pyproject.toml
+   ```
 
-2. **Commit and push** the version change:
+2. **Commit and push** the version changes:
    ```bash
-   git add pyproject.toml
+   git add pyproject.toml meta_ads_mcp/__init__.py
    git commit -m "Bump version to 0.3.8"
    git push origin main
    ```
@@ -53,11 +45,11 @@ This repository uses GitHub Actions to automatically publish releases to PyPI. H
 ## Workflows
 
 ### `publish.yml`
-- **Triggers**: When a GitHub release is published
+- **Triggers**: When a GitHub release is published, or manual workflow dispatch
 - **Purpose**: Builds and publishes the package to PyPI
-- **Environment**: Uses the `release` environment for additional security
+- **Security**: Uses trusted publishing with OIDC tokens (no API keys needed)
 
-### `test.yml`
+### `test.yml` (if present)
 - **Triggers**: On pushes and pull requests to main/master
 - **Purpose**: Tests package building and installation across Python versions
 - **Matrix**: Tests Python 3.10, 3.11, and 3.12
@@ -80,12 +72,13 @@ python -m twine upload dist/*
 ## Version Management
 
 - Follow semantic versioning (SemVer): `MAJOR.MINOR.PATCH`
-- Update version in `pyproject.toml` before creating releases
+- **Important**: Update version in BOTH `pyproject.toml` and `meta_ads_mcp/__init__.py`
 - The git tag should match the version (e.g., `v0.3.8` for version `0.3.8`)
+- Keep versions synchronized between the two files
 
 ## Security Notes
 
 - Trusted publishing is preferred over API tokens
-- The `release` environment can be configured with additional protection rules
+- Uses GitHub's OIDC tokens for secure authentication to PyPI
 - Only maintainers should be able to create releases
 - All builds run in isolated GitHub-hosted runners 
