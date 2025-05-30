@@ -328,29 +328,50 @@ def main():
         print("Primary authentication: Pipeboard API Token (via X-PIPEBOARD-API-TOKEN header)")
         print("Fallback authentication: Custom Meta App OAuth (via X-META-APP-ID header)")
         
-        # Create server with stateless configuration
-        global mcp_server
-        mcp_server = FastMCP(
-            name="meta-ads",
-            host=args.host,  # Pass host as setting
-            port=args.port   # Pass port as setting
-        )
+        # Configure the existing server with streamable HTTP settings
+        mcp_server.settings.host = args.host
+        mcp_server.settings.port = args.port
+        mcp_server.settings.stateless_http = True
+        mcp_server.settings.json_response = not args.sse_response
         
-        # Re-register resources and tools for HTTP transport
-        mcp_server.resource(uri="meta-ads://resources")(list_resources)
-        mcp_server.resource(uri="meta-ads://images/{resource_id}")(get_resource)
-        
-        # Import all tool modules to register them with the new server instance
-        logger.info("Re-registering all tools for HTTP transport")
+        # Import all tool modules to ensure they are registered
+        logger.info("Ensuring all tools are registered for HTTP transport")
         from . import accounts, campaigns, adsets, ads, insights, authentication
         from . import ads_library, budget_schedules
         
-        # Initialize HTTP handler for request processing
-        http_handler = StreamableHTTPHandler()
+        # ✅ NEW: Setup HTTP authentication middleware
+        logger.info("Setting up HTTP authentication middleware")
+        try:
+            from .http_auth_integration import setup_fastmcp_http_auth
+            
+            # Setup the FastMCP HTTP auth integration
+            setup_fastmcp_http_auth(mcp_server)
+            logger.info("FastMCP HTTP authentication integration setup successful")
+            print("✅ FastMCP HTTP authentication integration enabled")
+            print("   - Pipeboard tokens via X-PIPEBOARD-API-TOKEN header")
+            print("   - Direct Meta tokens via X-META-ACCESS-TOKEN header")
+            print("   - Context-aware authentication for all tools")
+            
+        except Exception as e:
+            logger.error(f"Failed to setup FastMCP HTTP authentication integration: {e}")
+            print(f"⚠️  FastMCP HTTP authentication integration setup failed: {e}")
+            print("   Server will still start but may not support header-based auth")
+        
+        # Log final server configuration
+        logger.info(f"FastMCP server configured with:")
+        logger.info(f"  - Host: {mcp_server.settings.host}")
+        logger.info(f"  - Port: {mcp_server.settings.port}")
+        logger.info(f"  - Stateless HTTP: {mcp_server.settings.stateless_http}")
+        logger.info(f"  - JSON Response: {mcp_server.settings.json_response}")
+        logger.info(f"  - Streamable HTTP Path: {mcp_server.settings.streamable_http_path}")
         
         # Start the FastMCP server with Streamable HTTP transport
         try:
             logger.info("Starting FastMCP server with Streamable HTTP transport")
+            print(f"✅ Server configured successfully")
+            print(f"   URL: http://{args.host}:{args.port}{mcp_server.settings.streamable_http_path}/")
+            print(f"   Mode: {'Stateless' if mcp_server.settings.stateless_http else 'Stateful'}")
+            print(f"   Format: {'JSON' if mcp_server.settings.json_response else 'SSE'}")
             mcp_server.run(transport="streamable-http")
         except Exception as e:
             logger.error(f"Error starting Streamable HTTP server: {e}")

@@ -20,3 +20,11 @@ uv.lock
 
 # Generated content
 ad_creatives/
+
+# Debug and development files
+debug/
+*.pyc
+.pytest_cache/
+
+# Keep organized directories but exclude some debug content
+!debug/README.md
