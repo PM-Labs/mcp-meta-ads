@@ -198,14 +198,13 @@ import json # Ensure json is imported if not already at the top
 
 class AuthInjectionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        logger.info(f"HTTP Auth Middleware: Processing request to {request.url.path}")
-        logger.info(f"HTTP Auth Middleware: Request headers: {list(request.headers.keys())}")
-        logger.info(f"HTTP Auth Middleware: Full headers: {json.dumps(dict(request.headers), indent=2)}")
+        logger.debug(f"HTTP Auth Middleware: Processing request to {request.url.path}")
+        logger.debug(f"HTTP Auth Middleware: Request headers: {list(request.headers.keys())}")
         
         token = FastMCPAuthIntegration.extract_token_from_headers(dict(request.headers))
         
         if token:
-            logger.info(f"HTTP Auth Middleware: Extracted token: {token[:10]}...")
+            logger.debug(f"HTTP Auth Middleware: Extracted token: {token[:10]}...")
             logger.debug("Injecting auth token into request context")
             FastMCPAuthIntegration.set_auth_token(token)
         else:
