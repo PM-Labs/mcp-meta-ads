@@ -26,7 +26,7 @@ class StreamableHTTPHandler:
     
     def __init__(self):
         """Initialize handler with no session storage - all auth per request"""
-        logger.info("StreamableHTTPHandler initialized for stateless operation")
+        logger.debug("StreamableHTTPHandler initialized for stateless operation")
         
     def handle_request(self, request_headers: Dict[str, str], request_body: Dict[str, Any]) -> Dict[str, Any]:
         """Handle individual request with authentication
@@ -38,16 +38,14 @@ class StreamableHTTPHandler:
         Returns:
             JSON response with auth status and any tool results
         """
-        logger.info(f"Handling request with headers: {list(request_headers.keys())}")
-        
         try:
             # Extract authentication configuration from headers
             auth_config = self.get_auth_config_from_headers(request_headers)
-            logger.info(f"Auth method detected: {auth_config['auth_method']}")
+            logger.debug(f"Auth method detected: {auth_config['auth_method']}")
             
             # Handle based on auth method
-            if auth_config['auth_method'] == 'pipeboard':
-                return self.handle_pipeboard_request(auth_config, request_body)
+            if auth_config['auth_method'] == 'bearer':
+                return self.handle_bearer_request(auth_config, request_body)
             elif auth_config['auth_method'] == 'custom_meta_app':
                 return self.handle_custom_app_request(auth_config, request_body)
             else:
@@ -82,20 +80,21 @@ class StreamableHTTPHandler:
             'meta_access_token': False,    # ❌ Use proper auth flows instead
         }
         
-        # PRIMARY: Check for Pipeboard token (handles 90%+ of cases)
-        pipeboard_token = request_headers.get('X-PIPEBOARD-API-TOKEN') or request_headers.get('x-pipeboard-api-token')
-        if pipeboard_token:
-            logger.info("Pipeboard authentication detected (primary path)")
+        # PRIMARY: Check for Bearer token in Authentication header (handles 90%+ of cases)
+        auth_header = request_headers.get('Authentication') or request_headers.get('authentication')
+        if auth_header and auth_header.lower().startswith('bearer '):
+            token = auth_header[7:].strip()
+            logger.debug("Bearer authentication detected (primary path)")
             return {
-                'auth_method': 'pipeboard',
-                'pipeboard_api_token': pipeboard_token,
+                'auth_method': 'bearer',
+                'bearer_token': token,
                 'requires_oauth': False  # Simple token-based auth
             }
         
         # FALLBACK: Custom Meta app (minority of users)
         meta_app_id = request_headers.get('X-META-APP-ID') or request_headers.get('x-meta-app-id')
         if meta_app_id:
-            logger.info("Custom Meta app authentication detected (fallback path)")
+            logger.debug("Custom Meta app authentication detected (fallback path)")
             return {
                 'auth_method': 'custom_meta_app',
                 'meta_app_id': meta_app_id,
@@ -109,8 +108,8 @@ class StreamableHTTPHandler:
             'requires_oauth': False
         }
     
-    def handle_pipeboard_request(self, auth_config: Dict[str, Any], request_body: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle request with Pipeboard token (primary path)
+    def handle_bearer_request(self, auth_config: Dict[str, Any], request_body: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle request with Bearer token (primary path)
         
         Args:
             auth_config: Authentication configuration from headers
@@ -119,8 +118,8 @@ class StreamableHTTPHandler:
         Returns:
             JSON response ready for tool execution
         """
-        logger.info("Processing Pipeboard authenticated request")
-        token = auth_config['pipeboard_api_token']
+        logger.debug("Processing Bearer authenticated request")
+        token = auth_config['bearer_token']
         
         # Token is ready to use immediately for API calls
         # TODO: In next phases, this will execute the actual tool call
@@ -128,9 +127,9 @@ class StreamableHTTPHandler:
             'jsonrpc': '2.0',
             'result': {
                 'status': 'ready',
-                'auth_method': 'pipeboard',
-                'message': 'Authentication successful with Pipeboard token',
-                'token_source': 'pipeboard_header'
+                'auth_method': 'bearer',
+                'message': 'Authentication successful with Bearer token',
+                'token_source': 'bearer_header'
             },
             'id': request_body.get('id')
         }
@@ -145,7 +144,7 @@ class StreamableHTTPHandler:
         Returns:
             JSON response indicating OAuth flow is required
         """
-        logger.info("Processing custom Meta app request (OAuth required)")
+        logger.debug("Processing custom Meta app request (OAuth required)")
         
         # This may require OAuth flow initiation
         # Each request is independent - no session state
@@ -179,7 +178,7 @@ class StreamableHTTPHandler:
                 'message': 'Authentication required',
                 'data': {
                     'supported_methods': [
-                        'X-PIPEBOARD-API-TOKEN: Pipeboard token (recommended)',
+                        'Authentication: Bearer <token> (recommended)',
                         'X-META-APP-ID: Custom Meta app OAuth (advanced users)'
                     ],
                     'documentation': 'https://github.com/pipeboard-co/meta-ads-mcp'
@@ -204,8 +203,8 @@ def main():
     """Main entry point for the package"""
     # Log startup information
     logger.info("Meta Ads MCP server starting")
-    logger.info(f"Python version: {sys.version}")
-    logger.info(f"Args: {sys.argv}")
+    logger.debug(f"Python version: {sys.version}")
+    logger.debug(f"Args: {sys.argv}")
     
     # Initialize argument parser
     parser = argparse.ArgumentParser(
@@ -228,8 +227,8 @@ def main():
                        help="Use SSE response format instead of JSON (default: JSON, only used with --transport streamable-http)")
     
     args = parser.parse_args()
-    logger.info(f"Parsed args: login={args.login}, app_id={args.app_id}, version={args.version}")
-    logger.info(f"Transport args: transport={args.transport}, port={args.port}, host={args.host}, sse_response={args.sse_response}")
+    logger.debug(f"Parsed args: login={args.login}, app_id={args.app_id}, version={args.version}")
+    logger.debug(f"Transport args: transport={args.transport}, port={args.port}, host={args.host}, sse_response={args.sse_response}")
     
     # Validate CLI argument combinations
     if args.transport == "stdio" and (args.port != 8080 or args.host != "localhost" or args.sse_response):
@@ -242,7 +241,7 @@ def main():
     # Check environment variable first (early init)
     env_app_id = os.environ.get("META_APP_ID")
     if env_app_id:
-        logger.info(f"Found META_APP_ID in environment: {env_app_id}")
+        logger.debug(f"Found META_APP_ID in environment: {env_app_id}")
     else:
         logger.warning("META_APP_ID not found in environment variables")
     
@@ -319,13 +318,13 @@ def main():
         logger.info(f"Starting MCP server with Streamable HTTP transport on {args.host}:{args.port}")
         logger.info("Mode: Stateless (no session persistence)")
         logger.info(f"Response format: {'SSE' if args.sse_response else 'JSON'}")
-        logger.info("Primary auth method: Pipeboard API Token (recommended)")
+        logger.info("Primary auth method: Bearer Token (recommended)")
         logger.info("Fallback auth method: Custom Meta App OAuth (complex setup)")
         
         print(f"Starting Meta Ads MCP server with Streamable HTTP transport")
         print(f"Server will listen on {args.host}:{args.port}")
         print(f"Response format: {'SSE' if args.sse_response else 'JSON'}")
-        print("Primary authentication: Pipeboard API Token (via X-PIPEBOARD-API-TOKEN header)")
+        print("Primary authentication: Bearer Token (via Authentication: Bearer <token> header)")
         print("Fallback authentication: Custom Meta App OAuth (via X-META-APP-ID header)")
         
         # Configure the existing server with streamable HTTP settings
@@ -348,7 +347,6 @@ def main():
             setup_fastmcp_http_auth(mcp_server)
             logger.info("FastMCP HTTP authentication integration setup successful")
             print("✅ FastMCP HTTP authentication integration enabled")
-            print("   - Pipeboard tokens via X-PIPEBOARD-API-TOKEN header")
             print("   - Direct Meta tokens via X-META-ACCESS-TOKEN header")
             print("   - Context-aware authentication for all tools")
             

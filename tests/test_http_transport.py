@@ -207,8 +207,8 @@ class HTTPTransportTester:
                 "headers": None
             },
             {
-                "name": "Pipeboard Token (Primary Path)",
-                "headers": {"X-PIPEBOARD-API-TOKEN": "test_pipeboard_token_12345"}
+                "name": "Bearer Token (Primary Path)",
+                "headers": {"Authentication": "Bearer test_pipeboard_token_12345"}
             },
             {
                 "name": "Custom Meta App ID (Fallback Path)",
@@ -217,7 +217,7 @@ class HTTPTransportTester:
             {
                 "name": "Both Auth Methods",
                 "headers": {
-                    "X-PIPEBOARD-API-TOKEN": "test_pipeboard_token_12345",
+                    "Authentication": "Bearer test_pipeboard_token_12345",
                     "X-META-APP-ID": "123456789012345"
                 }
             }
