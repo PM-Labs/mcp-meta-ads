@@ -41,7 +41,7 @@ class MetaAdsMCPClient:
         
         # Add authentication
         if pipeboard_token:
-            self.headers["Authentication"] = f"Bearer {pipeboard_token}"
+            self.headers["Authorization"] = f"Bearer {pipeboard_token}"
             print(f"✅ Using Pipeboard authentication")
         elif meta_access_token:
             self.headers["X-META-ACCESS-TOKEN"] = meta_access_token

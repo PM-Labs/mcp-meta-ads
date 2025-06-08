@@ -50,7 +50,7 @@ def test_headers():
 def pipeboard_auth_headers(test_headers):
     """Headers with Pipeboard authentication token"""
     headers = test_headers.copy()
-    headers["Authentication"] = "Bearer test_pipeboard_token_12345"
+    headers["Authorization"] = "Bearer test_pipeboard_token_12345"
     return headers
 
 

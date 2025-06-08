@@ -80,11 +80,11 @@ class StreamableHTTPHandler:
             'meta_access_token': False,    # ❌ Use proper auth flows instead
         }
         
-        # PRIMARY: Check for Bearer token in Authentication header (handles 90%+ of cases)
-        auth_header = request_headers.get('Authentication') or request_headers.get('authentication')
+        # PRIMARY: Check for Bearer token in Authorization header (handles 90%+ of cases)
+        auth_header = request_headers.get('Authorization') or request_headers.get('authorization')
         if auth_header and auth_header.lower().startswith('bearer '):
             token = auth_header[7:].strip()
-            logger.debug("Bearer authentication detected (primary path)")
+            logger.info("Bearer authentication detected (primary path)")
             return {
                 'auth_method': 'bearer',
                 'bearer_token': token,
@@ -178,7 +178,7 @@ class StreamableHTTPHandler:
                 'message': 'Authentication required',
                 'data': {
                     'supported_methods': [
-                        'Authentication: Bearer <token> (recommended)',
+                        'Authorization: Bearer <token> (recommended)',
                         'X-META-APP-ID: Custom Meta app OAuth (advanced users)'
                     ],
                     'documentation': 'https://github.com/pipeboard-co/meta-ads-mcp'
@@ -324,7 +324,7 @@ def main():
         print(f"Starting Meta Ads MCP server with Streamable HTTP transport")
         print(f"Server will listen on {args.host}:{args.port}")
         print(f"Response format: {'SSE' if args.sse_response else 'JSON'}")
-        print("Primary authentication: Bearer Token (via Authentication: Bearer <token> header)")
+        print("Primary authentication: Bearer Token (via Authorization: Bearer <token> header)")
         print("Fallback authentication: Custom Meta App OAuth (via X-META-APP-ID header)")
         
         # Configure the existing server with streamable HTTP settings
@@ -347,8 +347,8 @@ def main():
             setup_fastmcp_http_auth(mcp_server)
             logger.info("FastMCP HTTP authentication integration setup successful")
             print("✅ FastMCP HTTP authentication integration enabled")
+            print("   - Bearer tokens via Authorization: Bearer <token> header")
             print("   - Direct Meta tokens via X-META-ACCESS-TOKEN header")
-            print("   - Context-aware authentication for all tools")
             
         except Exception as e:
             logger.error(f"Failed to setup FastMCP HTTP authentication integration: {e}")

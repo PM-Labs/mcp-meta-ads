@@ -50,10 +50,11 @@ class FastMCPAuthIntegration:
         Returns:
             Token if found, None otherwise
         """
-        # Check for Bearer token in Authentication header (primary method)
-        auth_header = headers.get('Authentication') or headers.get('authentication') or headers.get('authorization')
+        # Check for Bearer token in Authorization header (primary method)
+        auth_header = headers.get('Authorization') or headers.get('authorization')
         if auth_header and auth_header.lower().startswith('bearer '):
             token = auth_header[7:].strip()
+            logger.debug("Found Bearer token in Authorization header")
             return token
         
         # Check for direct Meta access token
@@ -64,6 +65,7 @@ class FastMCPAuthIntegration:
         # Check for Pipeboard token (legacy support, to be removed)
         pipeboard_token = headers.get('X-PIPEBOARD-API-TOKEN') or headers.get('x-pipeboard-api-token')
         if pipeboard_token:
+            logger.debug("Found Pipeboard token in legacy headers")
             return pipeboard_token
         
         return None

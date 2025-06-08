@@ -208,7 +208,7 @@ class HTTPTransportTester:
             },
             {
                 "name": "Bearer Token (Primary Path)",
-                "headers": {"Authentication": "Bearer test_pipeboard_token_12345"}
+                "headers": {"Authorization": "Bearer test_pipeboard_token_12345"}
             },
             {
                 "name": "Custom Meta App ID (Fallback Path)",
@@ -217,7 +217,7 @@ class HTTPTransportTester:
             {
                 "name": "Both Auth Methods",
                 "headers": {
-                    "Authentication": "Bearer test_pipeboard_token_12345",
+                    "Authorization": "Bearer test_pipeboard_token_12345",
                     "X-META-APP-ID": "123456789012345"
                 }
             }
