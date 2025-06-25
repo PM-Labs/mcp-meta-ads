@@ -24,7 +24,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
 
 ## Getting started with Remote MCP (Recommended)
 
-The fastest and most reliable way to get started is to **[🚀 Get started with our Meta Ads Remote MCP](https://pipeboard.co/meta-ads-mcp)**. No technical setup required - just connect and start analyzing your ad campaigns with AI!
+The fastest and most reliable way to get started is to **[🚀 Get started with our Meta Ads Remote MCP](https://pipeboard.co)**. No technical setup required - just connect and start analyzing your ad campaigns with AI!
 
 ### For Claude Pro/Max Users
 
@@ -60,7 +60,7 @@ Add this to your `~/.cursor/mcp.json`:
 
 Use the Remote MCP URL: `https://mcp.pipeboard.co/meta-ads-mcp`
 
-**[📖 Get detailed setup instructions for your AI client here](https://pipeboard.co/meta-ads-mcp)**
+**[📖 Get detailed setup instructions for your AI client here](https://pipeboard.co)**
 
 ## Local Installation (Technical Users Only)
 
@@ -97,7 +97,7 @@ For detailed step-by-step instructions, authentication setup, debugging, and tro
 
 ### Remote MCP (Recommended)
 
-**[✨ Get started with Remote MCP here](https://pipeboard.co/meta-ads-mcp)** - no technical setup required! Just connect your Facebook Ads account and start asking AI to analyze your campaigns.
+**[✨ Get started with Remote MCP here](https://pipeboard.co)** - no technical setup required! Just connect your Facebook Ads account and start asking AI to analyze your campaigns.
 
 ### Local Installation (Technical Users)
 
@@ -338,7 +338,7 @@ For detailed local installation testing, see [Local Installation Guide](LOCAL_IN
 
 ### 💡 Quick Fix: Skip the Technical Setup!
 
-The easiest way to avoid any setup issues is to **[🎯 use our Remote MCP instead](https://pipeboard.co/meta-ads-mcp)**. No downloads, no configuration - just connect your ads account and start getting AI insights on your campaigns immediately!
+The easiest way to avoid any setup issues is to **[🎯 use our Remote MCP instead](https://pipeboard.co)**. No downloads, no configuration - just connect your ads account and start getting AI insights on your campaigns immediately!
 
 ### Local Installation Issues
 

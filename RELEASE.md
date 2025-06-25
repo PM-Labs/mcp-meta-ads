@@ -30,7 +30,7 @@ This repository uses GitHub Actions to automatically publish releases to PyPI. H
    ```
 
 3. **Create a GitHub release**:
-   - Go to https://github.com/nictuku/meta-ads-mcp/releases
+   - Go to https://github.com/pipeboard-co/meta-ads-mcp/releases
    - Click "Create a new release"
    - Tag version: `v0.3.8` (must match the version in pyproject.toml)
    - Release title: `v0.3.8`

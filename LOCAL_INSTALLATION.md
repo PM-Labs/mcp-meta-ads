@@ -1,6 +1,6 @@
 # Meta Ads MCP - Local Installation Guide
 
-This guide covers everything you need to know about installing and running Meta Ads MCP locally on your machine. For the easier Remote MCP option, see our [main README](README.md).
+This guide covers everything you need to know about installing and running Meta Ads MCP locally on your machine. For the easier Remote MCP option, **[🚀 get started here](https://pipeboard.co)**.
 
 ## Table of Contents
 
@@ -42,7 +42,7 @@ pip install meta-ads-mcp
 
 ```bash
 # Clone the repository
-git clone https://github.com/nictuku/meta-ads-mcp.git
+git clone https://github.com/pipeboard-co/meta-ads-mcp.git
 cd meta-ads-mcp
 
 # Install in development mode
@@ -149,7 +149,7 @@ In Cherry Studio settings, add a new MCP server:
 
 ```bash
 # Clone the repository
-git clone https://github.com/nictuku/meta-ads-mcp.git
+git clone https://github.com/pipeboard-co/meta-ads-mcp.git
 cd meta-ads-mcp
 
 # Create virtual environment (optional but recommended)
@@ -482,8 +482,8 @@ If you're still experiencing issues:
 2. **Search existing issues** on GitHub
 3. **Join our Discord** at [discord.gg/hNxpJcqM52](https://discord.gg/hNxpJcqM52)
 4. **Email support** at info@pipeboard.co
-5. **Consider Remote MCP** at [pipeboard.co/meta-ads-mcp](https://pipeboard.co/meta-ads-mcp) as an alternative
+5. **Consider Remote MCP** at [pipeboard.co](https://pipeboard.co) as an alternative
 
 ---
 
-**Quick Alternative**: If local installation is causing issues, try our [Remote MCP service](https://pipeboard.co/meta-ads-mcp) - no local setup required! 
+**Quick Alternative**: If local installation is causing issues, try our [Remote MCP service](https://pipeboard.co) - no local setup required! 

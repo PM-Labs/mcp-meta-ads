@@ -29,8 +29,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/nictuku/meta-ads-mcp"
-"Bug Tracker" = "https://github.com/nictuku/meta-ads-mcp/issues"
+"Homepage" = "https://github.com/pipeboard-co/meta-ads-mcp"
+"Bug Tracker" = "https://github.com/pipeboard-co/meta-ads-mcp/issues"
 
 [project.scripts]
 meta-ads-mcp = "meta_ads_mcp:entrypoint"
