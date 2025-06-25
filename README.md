@@ -6,33 +6,79 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for in
 
 [![Meta Ads MCP Server Demo](https://github.com/user-attachments/assets/3e605cee-d289-414b-814c-6299e7f3383e)](https://github.com/user-attachments/assets/3e605cee-d289-414b-814c-6299e7f3383e)
 
-
 ## Community & Support
 
 - [Discord](https://discord.gg/hNxpJcqM52). Join the community.
 - [Email Support](info@pipeboard.co). Email us for support.
-  
-## Quick Start
 
-1. Sign-up to [Pipeboard](https://pipeboard.co) to authenticate with Meta (alternatively, you can setup your own [custom meta app](CUSTOM_META_APP.md))
-2. Get your Pipeboard token at [pipeboard.co/api-tokens](https://pipeboard.co/api-tokens) 
-3. Add this configuration to your MCP client:
+## Table of Contents
+
+- [🚀 Getting started with Remote MCP (Recommended for Marketers)](#getting-started-with-remote-mcp-recommended)
+- [Local Installation (Technical Users Only)](#local-installation-technical-users-only)
+- [Features](#features)
+- [Configuration](#configuration)
+- [Available MCP Tools](#available-mcp-tools)
+- [Privacy and Security](#privacy-and-security)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+
+## Getting started with Remote MCP (Recommended)
+
+The fastest and most reliable way to get started is to **[🚀 Get started with our Meta Ads Remote MCP](https://pipeboard.co/meta-ads-mcp)**. No technical setup required - just connect and start analyzing your ad campaigns with AI!
+
+### For Claude Pro/Max Users
+
+1. Go to [claude.ai/settings/integrations](https://claude.ai/settings/integrations) (requires Claude Pro or Max)
+2. Click "Add Integration" and enter:
+   - **Name**: "Pipeboard Meta Ads" (or any name you prefer)
+   - **Integration URL**: `https://mcp.pipeboard.co/meta-ads-mcp`
+3. Click "Connect" next to the integration and follow the prompts to:
+   - Login to Pipeboard
+   - Connect your Facebook Ads account
+
+That's it! You can now ask Claude to analyze your Meta ad campaigns, get performance insights, and manage your advertising.
+
+### For Cursor Users
+
+Add this to your `~/.cursor/mcp.json`:
 
 ```json
-"mcpServers": {
-  "meta-ads": {
-    "command": "uvx",
-    "args": ["meta-ads-mcp"],
-    "env": {
-      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Get your token at https://pipeboard.co/api-tokens
+{
+  "mcpServers": {
+    "meta-ads-remote": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://mcp.pipeboard.co/meta-ads-mcp"
+      ]
     }
   }
 }
 ```
 
-That's it! You can now use Meta Ads MCP in your favorite MCP client.
+### For Other MCP Clients
 
-> **Note**: If you prefer to use your own Meta Developer App instead of Pipeboard authentication, see [CUSTOM_META_APP.md](CUSTOM_META_APP.md) for instructions.
+Use the Remote MCP URL: `https://mcp.pipeboard.co/meta-ads-mcp`
+
+**[📖 Get detailed setup instructions for your AI client here](https://pipeboard.co/meta-ads-mcp)**
+
+## Local Installation (Technical Users Only)
+
+If you're a developer or need to customize the installation, you can run Meta Ads MCP locally. **Most marketers should use the Remote MCP above instead!** For complete technical setup instructions, see our **[Local Installation Guide](LOCAL_INSTALLATION.md)**.
+
+### Quick Local Setup
+
+```bash
+# Install via uvx (recommended)
+uvx meta-ads-mcp
+
+# Set your Pipeboard token
+export PIPEBOARD_API_TOKEN=your_pipeboard_token
+
+# Add to your MCP client configuration
+```
+
+For detailed step-by-step instructions, authentication setup, debugging, and troubleshooting, visit **[LOCAL_INSTALLATION.md](LOCAL_INSTALLATION.md)**.
 
 ## Features
 
@@ -47,100 +93,15 @@ That's it! You can now use Meta Ads MCP in your favorite MCP client.
 - **Simple Authentication**: Easy setup with secure OAuth authentication
 - **Cross-Platform Support**: Works on Windows, macOS, and Linux
 
-## Advanced Setup
-
-### Development Installation
-
-If you're contributing to the project or need to run it directly:
-
-```bash
-# From the repository root
-uv pip install -e .
-```
-
-## Privacy and Security
-
-The Meta Ads MCP follows security best practices:
-
-1. Tokens are cached in a platform-specific secure location:
-   - Windows: `%APPDATA%\meta-ads-mcp\token_cache.json`
-   - macOS: `~/Library/Application Support/meta-ads-mcp/token_cache.json`
-   - Linux: `~/.config/meta-ads-mcp/token_cache.json`
-
-2. You do not need to provide your access token for each command; it will be automatically retrieved from the cache.
-
-## Testing
-
-### LLM Interface Testing
-
-When using the Meta Ads MCP with an LLM interface (like Claude):
-
-1. Ensure the PIPEBOARD_API_TOKEN environment variable is set
-2. Verify account access by calling `mcp_meta_ads_get_ad_accounts`
-3. Check specific account details with `mcp_meta_ads_get_account_info`
-
-## Troubleshooting
-
-### Authentication Issues
-
-If you encounter authentication issues:
-
-1. Verify your Pipeboard setup:
-   - Check that `PIPEBOARD_API_TOKEN` is set correctly
-   - Verify your token in the Pipeboard dashboard
-   - Try forcing a new login: `python test_pipeboard_auth.py --force-login`
-
-2. When using the LLM interface:
-   - Ensure the PIPEBOARD_API_TOKEN environment variable is set
-   - Check that the callback server is running properly
-
-### API Errors
-
-If you receive errors from the Meta API:
-1. Ensure the user has appropriate permissions on the ad accounts
-2. Check if there are rate limits or other restrictions
-3. Verify your Pipeboard token hasn't expired
-
-## Log Location
-
-Log files are stored in a platform-specific location:
-
-- **macOS**: `~/Library/Application Support/meta-ads-mcp/meta_ads_debug.log`
-- **Windows**: `%APPDATA%\meta-ads-mcp\meta_ads_debug.log` 
-- **Linux**: `~/.config/meta-ads-mcp/meta_ads_debug.log` 
-
 ## Configuration
 
-### Pipeboard Authentication
+### Remote MCP (Recommended)
 
-The easiest way to use Meta Ads MCP is with Pipeboard authentication:
+**[✨ Get started with Remote MCP here](https://pipeboard.co/meta-ads-mcp)** - no technical setup required! Just connect your Facebook Ads account and start asking AI to analyze your campaigns.
 
-1. Sign up at [Pipeboard.co](https://pipeboard.co) and generate an API token
-2. Set the environment variable:
-   ```bash
-   export PIPEBOARD_API_TOKEN=your_pipeboard_token
-   ```
-3. Run meta-ads-mcp - it will handle authentication automatically
+### Local Installation (Technical Users)
 
-### Usage with Cursor or Claude Desktop
-
-Add this to your `claude_desktop_config.json` to integrate with Claude or `~/.cursor/mcp.json` to integrate with Cursor:
-
-```json
-"mcpServers": {
-  "meta-ads": {
-    "command": "uvx",
-    "args": ["meta-ads-mcp"],
-    "env": {
-      "PIPEBOARD_API_TOKEN": "your_pipeboard_token"  // Get your token at https://pipeboard.co
-    }
-  }
-}
-```
-
-## Transports
-
-Meta Ads MCP uses **stdio transport** by default, which works with MCP clients like Claude Desktop and Cursor. For web applications and direct HTTP API access, see [STREAMABLE_HTTP_SETUP.md](STREAMABLE_HTTP_SETUP.md) for streamable HTTP transport configuration.
+For local installation configuration, authentication options, and advanced technical setup, see our **[Local Installation Guide](LOCAL_INSTALLATION.md)**.
 
 ### Available MCP Tools
 
@@ -353,3 +314,38 @@ Meta Ads MCP uses **stdio transport** by default, which works with MCP clients l
       - `time_end`: Unix timestamp for when the high demand period should end.
       - `access_token` (optional): Meta API access token.
     - Returns: JSON string with the ID of the created budget schedule or an error message.
+
+## Privacy and Security
+
+Meta Ads MCP follows security best practices with secure token management and automatic authentication handling. 
+
+- **Remote MCP**: All authentication is handled securely in the cloud - no local token storage required
+- **Local Installation**: Tokens are cached securely on your local machine - see [Local Installation Guide](LOCAL_INSTALLATION.md) for details
+
+## Testing
+
+### Basic Testing
+
+Test your Meta Ads MCP connection with any MCP client:
+
+1. **Verify Account Access**: Ask your LLM to use `mcp_meta_ads_get_ad_accounts`
+2. **Check Account Details**: Use `mcp_meta_ads_get_account_info` with your account ID
+3. **List Campaigns**: Try `mcp_meta_ads_get_campaigns` to see your ad campaigns
+
+For detailed local installation testing, see [Local Installation Guide](LOCAL_INSTALLATION.md).
+
+## Troubleshooting
+
+### 💡 Quick Fix: Skip the Technical Setup!
+
+The easiest way to avoid any setup issues is to **[🎯 use our Remote MCP instead](https://pipeboard.co/meta-ads-mcp)**. No downloads, no configuration - just connect your ads account and start getting AI insights on your campaigns immediately!
+
+### Local Installation Issues
+
+For comprehensive troubleshooting, debugging, and local installation issues, see our **[Local Installation Guide](LOCAL_INSTALLATION.md)** which includes:
+
+- Authentication troubleshooting
+- Installation issues and solutions  
+- API error resolution
+- Debug logs and diagnostic commands
+- Performance optimization tips 
