@@ -79,6 +79,7 @@ python -m meta_ads_mcp --transport streamable-http --port 9000
 curl -H "Authorization: Bearer your_pipeboard_token" \
      -X POST http://localhost:8080/mcp/ \
      -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
      -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
 
@@ -90,6 +91,7 @@ If you have a Meta Developer App, you can use a direct access token via the `X-M
 curl -H "X-META-ACCESS-TOKEN: your_meta_access_token" \
      -X POST http://localhost:8080/mcp/ \
      -H "Content-Type: application/json" \
+     -H "Accept: application/json, text/event-stream" \
      -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
 
@@ -129,6 +131,7 @@ All responses follow JSON-RPC 2.0 format:
 ```bash
 curl -X POST http://localhost:8080/mcp/ \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer your_token" \
   -d '{
     "jsonrpc": "2.0",
@@ -147,6 +150,7 @@ curl -X POST http://localhost:8080/mcp/ \
 ```bash
 curl -X POST http://localhost:8080/mcp/ \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer your_token" \
   -d '{
     "jsonrpc": "2.0",
