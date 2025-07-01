@@ -164,6 +164,7 @@ curl -X POST http://localhost:8080/mcp/ \
 ```bash
 curl -X POST http://localhost:8080/mcp/ \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer your_token" \
   -d '{
     "jsonrpc": "2.0",
@@ -181,6 +182,7 @@ curl -X POST http://localhost:8080/mcp/ \
 ```bash
 curl -X POST http://localhost:8080/mcp/ \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer your_token" \
   -d '{
     "jsonrpc": "2.0",
@@ -337,6 +339,7 @@ Test if the server is running by sending a `tools/list` request:
 ```bash
 curl -X POST http://localhost:8080/mcp/ \
   -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer your_token" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
