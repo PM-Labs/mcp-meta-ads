@@ -5,17 +5,17 @@ build-backend = "hatchling.build"
 [project]
 name = "meta-ads-mcp"
 version = "0.4.0"
-description = "Model Calling Protocol (MCP) plugin for interacting with Meta Ads API"
+description = "Model Context Protocol (MCP) plugin for interacting with Meta Ads API"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [
     {name = "Yves Junqueira", email = "yves.junqueira@gmail.com"},
 ]
 keywords = ["meta", "facebook", "ads", "api", "mcp", "claude"]
-license = {text = "MIT"}
+license = {text = "Apache-2.0"}
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
