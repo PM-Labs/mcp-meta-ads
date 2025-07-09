@@ -5,6 +5,7 @@ import os
 import httpx
 from typing import Optional, Dict, Any, List, Union
 from .server import mcp_server
+from .api import meta_api_tool
 
 
 # Only register the duplication functions if the environment variable is set
@@ -12,8 +13,10 @@ ENABLE_DUPLICATION = bool(os.environ.get("META_ADS_ENABLE_DUPLICATION", ""))
 
 if ENABLE_DUPLICATION:
     @mcp_server.tool()
+    @meta_api_tool
     async def duplicate_campaign(
         campaign_id: str,
+        access_token: str = None,
         name_suffix: Optional[str] = " - Copy",
         include_ad_sets: bool = True,
         include_ads: bool = True,
@@ -40,6 +43,7 @@ if ENABLE_DUPLICATION:
         return await _forward_duplication_request(
             "campaign",
             campaign_id,
+            access_token,
             {
                 "name_suffix": name_suffix,
                 "include_ad_sets": include_ad_sets,
@@ -52,8 +56,10 @@ if ENABLE_DUPLICATION:
         )
 
     @mcp_server.tool()
+    @meta_api_tool
     async def duplicate_adset(
         adset_id: str,
+        access_token: str = None,
         target_campaign_id: Optional[str] = None,
         name_suffix: Optional[str] = " - Copy",
         include_ads: bool = True,
@@ -78,6 +84,7 @@ if ENABLE_DUPLICATION:
         return await _forward_duplication_request(
             "adset",
             adset_id,
+            access_token,
             {
                 "target_campaign_id": target_campaign_id,
                 "name_suffix": name_suffix,
@@ -89,8 +96,10 @@ if ENABLE_DUPLICATION:
         )
 
     @mcp_server.tool()
+    @meta_api_tool
     async def duplicate_ad(
         ad_id: str,
+        access_token: str = None,
         target_adset_id: Optional[str] = None,
         name_suffix: Optional[str] = " - Copy",
         duplicate_creative: bool = True,
@@ -113,6 +122,7 @@ if ENABLE_DUPLICATION:
         return await _forward_duplication_request(
             "ad",
             ad_id,
+            access_token,
             {
                 "target_adset_id": target_adset_id,
                 "name_suffix": name_suffix,
@@ -123,8 +133,10 @@ if ENABLE_DUPLICATION:
         )
 
     @mcp_server.tool()
+    @meta_api_tool
     async def duplicate_creative(
         creative_id: str,
+        access_token: str = None,
         name_suffix: Optional[str] = " - Copy",
         new_primary_text: Optional[str] = None,
         new_headline: Optional[str] = None,
@@ -149,6 +161,7 @@ if ENABLE_DUPLICATION:
         return await _forward_duplication_request(
             "creative",
             creative_id,
+            access_token,
             {
                 "name_suffix": name_suffix,
                 "new_primary_text": new_primary_text,
@@ -160,26 +173,23 @@ if ENABLE_DUPLICATION:
         )
 
 
-async def _forward_duplication_request(resource_type: str, resource_id: str, options: Dict[str, Any]) -> str:
+async def _forward_duplication_request(resource_type: str, resource_id: str, access_token: str, options: Dict[str, Any]) -> str:
     """
     Forward duplication request to the cloud-hosted MCP API.
     
     Args:
         resource_type: Type of resource to duplicate (campaign, adset, ad, creative)
         resource_id: ID of the resource to duplicate
+        access_token: Meta API access token from the request
         options: Duplication options
     """
     try:
-        # Get the access token from environment or context
-        # In a real implementation, this would come from the MCP request context
-        access_token = os.environ.get("META_ADS_ACCESS_TOKEN")
-        
         if not access_token:
             return json.dumps({
                 "error": "authentication_required",
                 "message": "Meta Ads access token not found",
                 "details": {
-                    "required": "META_ADS_ACCESS_TOKEN environment variable or authenticated session"
+                    "required": "Valid access token from authenticated session"
                 }
             }, indent=2)
 

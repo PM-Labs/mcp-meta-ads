@@ -31,12 +31,11 @@ async def test_forward_duplication_request_no_token():
     """Test that _forward_duplication_request handles missing access token."""
     from meta_ads_mcp.core.duplication import _forward_duplication_request
     
-    with patch.dict(os.environ, {}, clear=True):
-        result = await _forward_duplication_request("campaign", "123456789", {})
-        result_json = json.loads(result)
-        
-        assert result_json["error"] == "authentication_required"
-        assert "access token not found" in result_json["message"]
+    result = await _forward_duplication_request("campaign", "123456789", None, {})
+    result_json = json.loads(result)
+    
+    assert result_json["error"] == "authentication_required"
+    assert "access token not found" in result_json["message"]
 
 
 @pytest.mark.asyncio
@@ -48,34 +47,33 @@ async def test_forward_duplication_request_with_token():
     mock_response.status_code = 403
     mock_response.json.return_value = {"error": "premium_feature"}
     
-    with patch.dict(os.environ, {"META_ADS_ACCESS_TOKEN": "test_token"}):
-        with patch("meta_ads_mcp.core.duplication.httpx.AsyncClient") as mock_client:
-            mock_client.return_value.__aenter__.return_value.post.return_value = mock_response
-            
-            result = await _forward_duplication_request("campaign", "123456789", {
-                "name_suffix": " - Test"
-            })
-            result_json = json.loads(result)
-            
-            # Should return premium feature message for 403 response
-            assert result_json["error"] == "premium_feature_required"
-            assert "premium feature" in result_json["message"]
-            
-            # Verify the HTTP request was made with correct parameters
-            mock_client.return_value.__aenter__.return_value.post.assert_called_once()
-            call_args = mock_client.return_value.__aenter__.return_value.post.call_args
-            
-            # Check URL
-            assert call_args[0][0] == "https://mcp.pipeboard.co/api/meta/duplicate/campaign/123456789"
-            
-            # Check headers
-            headers = call_args[1]["headers"]
-            assert headers["Authorization"] == "Bearer test_token"
-            assert headers["Content-Type"] == "application/json"
-            
-            # Check JSON payload
-            json_payload = call_args[1]["json"]
-            assert json_payload == {"name_suffix": " - Test"}
+    with patch("meta_ads_mcp.core.duplication.httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__.return_value.post.return_value = mock_response
+        
+        result = await _forward_duplication_request("campaign", "123456789", "test_token", {
+            "name_suffix": " - Test"
+        })
+        result_json = json.loads(result)
+        
+        # Should return premium feature message for 403 response
+        assert result_json["error"] == "premium_feature_required"
+        assert "premium feature" in result_json["message"]
+        
+        # Verify the HTTP request was made with correct parameters
+        mock_client.return_value.__aenter__.return_value.post.assert_called_once()
+        call_args = mock_client.return_value.__aenter__.return_value.post.call_args
+        
+        # Check URL
+        assert call_args[0][0] == "https://mcp.pipeboard.co/api/meta/duplicate/campaign/123456789"
+        
+        # Check headers
+        headers = call_args[1]["headers"]
+        assert headers["Authorization"] == "Bearer test_token"
+        assert headers["Content-Type"] == "application/json"
+        
+        # Check JSON payload
+        json_payload = call_args[1]["json"]
+        assert json_payload == {"name_suffix": " - Test"}
 
 
 @pytest.mark.asyncio
@@ -94,11 +92,12 @@ async def test_duplicate_campaign_function_available_when_enabled():
         with patch("meta_ads_mcp.core.duplication._forward_duplication_request") as mock_forward:
             mock_forward.return_value = '{"success": true}'
             
-            result = await duplication.duplicate_campaign("123456789")
+            result = await duplication.duplicate_campaign("123456789", access_token="test_token")
             
             mock_forward.assert_called_once_with(
                 "campaign",
                 "123456789",
+                "test_token",
                 {
                     "name_suffix": " - Copy",
                     "include_ad_sets": True,
