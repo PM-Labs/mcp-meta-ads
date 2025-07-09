@@ -290,21 +290,13 @@ For local installation configuration, authentication options, and advanced techn
       - `level`: Level of aggregation (ad, adset, campaign, account)
     - Returns: Performance metrics for the specified object
 
-20. `mcp_meta_ads_debug_image_download`
-    - Debug image download issues and report detailed diagnostics
-    - Inputs:
-      - `access_token` (optional): Meta API access token (will use cached token if not provided)
-      - `url`: Direct image URL to test (optional)
-      - `ad_id`: Meta Ads ad ID (optional, used if url is not provided)
-    - Returns: Diagnostic information about image download attempts
-
-21. `mcp_meta_ads_get_login_link`
+20. `mcp_meta_ads_get_login_link`
     - Get a clickable login link for Meta Ads authentication
     - Inputs:
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
     - Returns: A clickable resource link for Meta authentication
 
-22. `mcp_meta-ads_create_budget_schedule`
+21. `mcp_meta-ads_create_budget_schedule`
     - Create a budget schedule for a Meta Ads campaign.
     - Inputs:
       - `campaign_id`: Meta Ads campaign ID.
