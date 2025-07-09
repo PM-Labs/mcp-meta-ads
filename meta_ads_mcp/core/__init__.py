@@ -12,6 +12,7 @@ from .auth import login
 from .ads_library import search_ads_archive
 from .budget_schedules import create_budget_schedule
 from . import reports  # Import module to register conditional tools
+from . import duplication  # Import module to register conditional duplication tools
 
 __all__ = [
     'mcp_server',
