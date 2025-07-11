@@ -40,17 +40,14 @@ That's it! You can now ask Claude to analyze your Meta ad campaigns, get perform
 
 ### For Cursor Users
 
-Add this to your `~/.cursor/mcp.json`:
+Add the following to your `~/.cursor/mcp.json`. Once you enable the remote MCP, click on "Needs login" to finish the login process.
+
 
 ```json
 {
   "mcpServers": {
     "meta-ads-remote": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://mcp.pipeboard.co/meta-ads-mcp"
-      ]
+      "url": "https://mcp.pipeboard.co/meta-ads-mcp"
     }
   }
 }
