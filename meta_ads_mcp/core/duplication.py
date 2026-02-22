@@ -6,15 +6,20 @@ import os
 import httpx
 from typing import Optional, Dict, Any, List, Union
 from .server import mcp_server
-from .api import meta_api_tool
+from .api import meta_api_tool, McpToolError
 from . import auth
 from .http_auth_integration import FastMCPAuthIntegration
 
 logger = logging.getLogger(__name__)
 
 
-class RateLimitError(Exception):
+class RateLimitError(McpToolError):
     """Raised on 429 so FastMCP sets isError: true in the MCP response."""
+    pass
+
+
+class DuplicationError(McpToolError):
+    """Raised on all non-success duplication responses so FastMCP sets isError: true."""
     pass
 
 
@@ -243,24 +248,24 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
 
         # Validate we have both required tokens
         if not pipeboard_token:
-            return json.dumps({
+            raise DuplicationError(json.dumps({
                 "error": "authentication_required",
                 "message": "Pipeboard API token not found",
                 "details": {
                     "required": "Valid Pipeboard token via X-Pipeboard-Token header",
                     "received_headers": "Check that the MCP server is forwarding the X-Pipeboard-Token header"
                 }
-            }, indent=2)
-            
+            }, indent=2))
+
         if not facebook_token:
-            return json.dumps({
+            raise DuplicationError(json.dumps({
                 "error": "authentication_required",
                 "message": "Meta Ads access token not found",
                 "details": {
                     "required": "Valid Meta access token from authenticated session",
                     "check": "Ensure Facebook account is connected and token is valid"
                 }
-            }, indent=2)
+            }, indent=2))
 
         # Construct the API endpoint.
         # PIPEBOARD_API_BASE_URL allows overriding for local e2e testing.
@@ -293,49 +298,53 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
                 # Validation failed
                 try:
                     error_data = response.json()
-                    return json.dumps({
+                    raise DuplicationError(json.dumps({
                         "success": False,
                         "error": "validation_failed",
                         "errors": error_data.get("errors", [response.text]),
                         "warnings": error_data.get("warnings", [])
-                    }, indent=2)
+                    }, indent=2))
+                except DuplicationError:
+                    raise
                 except:
-                    return json.dumps({
+                    raise DuplicationError(json.dumps({
                         "success": False,
                         "error": "validation_failed",
                         "errors": [response.text],
                         "warnings": []
-                    }, indent=2)
+                    }, indent=2))
             elif response.status_code == 401:
-                return json.dumps({
+                raise DuplicationError(json.dumps({
                     "success": False,
                     "error": "authentication_error",
                     "message": "Invalid or expired API token"
-                }, indent=2)
+                }, indent=2))
             elif response.status_code == 402:
                 try:
                     error_data = response.json()
-                    return json.dumps({
+                    raise DuplicationError(json.dumps({
                         "success": False,
                         "error": "subscription_required",
                         "message": error_data.get("message", "This feature is not available in your current plan"),
                         "upgrade_url": error_data.get("upgrade_url", "https://pipeboard.co/upgrade"),
                         "suggestion": error_data.get("suggestion", "Please upgrade your account to access this feature")
-                    }, indent=2)
+                    }, indent=2))
+                except DuplicationError:
+                    raise
                 except:
-                    return json.dumps({
+                    raise DuplicationError(json.dumps({
                         "success": False,
                         "error": "subscription_required",
                         "message": "This feature is not available in your current plan",
                         "upgrade_url": "https://pipeboard.co/upgrade",
                         "suggestion": "Please upgrade your account to access this feature"
-                    }, indent=2)
+                    }, indent=2))
             elif response.status_code == 403:
                 try:
                     error_data = response.json()
                     # Check if this is a premium feature error
                     if error_data.get("error") == "premium_feature":
-                        return json.dumps({
+                        raise DuplicationError(json.dumps({
                             "success": False,
                             "error": "premium_feature_required",
                             "message": error_data.get("message", "This is a premium feature that requires subscription"),
@@ -343,10 +352,10 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
                                 "upgrade_url": "https://pipeboard.co/upgrade",
                                 "suggestion": "Please upgrade your account to access this feature"
                             })
-                        }, indent=2)
+                        }, indent=2))
                     else:
                         # Default to facebook connection required
-                        return json.dumps({
+                        raise DuplicationError(json.dumps({
                             "success": False,
                             "error": "facebook_connection_required",
                             "message": error_data.get("message", "You need to connect your Facebook account first"),
@@ -354,9 +363,11 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
                                 "login_flow_url": "/connections",
                                 "auth_flow_url": "/api/meta/auth"
                             })
-                        }, indent=2)
+                        }, indent=2))
+                except DuplicationError:
+                    raise
                 except:
-                    return json.dumps({
+                    raise DuplicationError(json.dumps({
                         "success": False,
                         "error": "facebook_connection_required",
                         "message": "You need to connect your Facebook account first",
@@ -364,14 +375,14 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
                             "login_flow_url": "/connections",
                             "auth_flow_url": "/api/meta/auth"
                         }
-                    }, indent=2)
+                    }, indent=2))
             elif response.status_code == 404:
-                return json.dumps({
+                raise DuplicationError(json.dumps({
                     "success": False,
                     "error": "resource_not_found",
                     "message": f"{resource_type.title()} not found or access denied",
                     "suggestion": f"Verify the {resource_type} ID and your Facebook account permissions"
-                }, indent=2)
+                }, indent=2))
             elif response.status_code == 429:
                 # Raise so FastMCP sets isError: true in MCP response,
                 # enabling the Next.js proxy to detect and retry.
@@ -386,21 +397,23 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
             elif response.status_code == 502:
                 try:
                     error_data = response.json()
-                    return json.dumps({
+                    raise DuplicationError(json.dumps({
                         "success": False,
                         "error": "meta_api_error",
                         "message": error_data.get("message", "Facebook API error"),
                         "recoverable": True,
                         "suggestion": "Please wait 5 minutes before retrying"
-                    }, indent=2)
+                    }, indent=2))
+                except DuplicationError:
+                    raise
                 except:
-                    return json.dumps({
+                    raise DuplicationError(json.dumps({
                         "success": False,
                         "error": "meta_api_error",
                         "message": "Facebook API error",
                         "recoverable": True,
                         "suggestion": "Please wait 5 minutes before retrying"
-                    }, indent=2)
+                    }, indent=2))
             else:
                 error_detail = response.text
                 error_json = None
@@ -428,33 +441,33 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
                         if error_json.get(field) is not None:
                             result[field] = error_json[field]
 
-                return json.dumps(result, indent=2)
+                raise DuplicationError(json.dumps(result, indent=2))
     
     except httpx.TimeoutException:
-        return json.dumps({
+        raise DuplicationError(json.dumps({
             "error": "request_timeout",
             "message": "Request to duplication service timed out",
             "details": {
                 "suggestion": "Please try again later",
                 "timeout": "120 seconds"
             }
-        }, indent=2)
-    
+        }, indent=2))
+
     except httpx.RequestError as e:
-        return json.dumps({
-            "error": "network_error", 
+        raise DuplicationError(json.dumps({
+            "error": "network_error",
             "message": "Failed to connect to duplication service",
             "details": {
                 "error": str(e),
                 "suggestion": "Check your internet connection and try again"
             }
-        }, indent=2)
-    
-    except RateLimitError:
-        raise  # Let FastMCP handle this to set isError: true
+        }, indent=2))
+
+    except (RateLimitError, DuplicationError):
+        raise  # Let FastMCP handle these to set isError: true
 
     except Exception as e:
-        return json.dumps({
+        raise DuplicationError(json.dumps({
             "error": "unexpected_error",
             "message": f"Unexpected error during {resource_type} duplication",
             "details": {
@@ -462,7 +475,7 @@ async def _forward_duplication_request(resource_type: str, resource_id: str, acc
                 "resource_type": resource_type,
                 "resource_id": resource_id
             }
-        }, indent=2)
+        }, indent=2))
 
 
 def _get_estimated_components(resource_type: str, options: Dict[str, Any]) -> Dict[str, Any]:

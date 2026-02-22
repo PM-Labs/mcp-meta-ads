@@ -10,6 +10,17 @@ from . import auth
 from .auth import needs_authentication, auth_manager, start_callback_server, shutdown_callback_server
 from .utils import logger
 
+class McpToolError(Exception):
+    """Base class for MCP tool errors that must set isError: true.
+
+    Subclasses should be raised (not returned) from tool handlers.
+    meta_api_tool re-raises these so FastMCP sees them and sets
+    isError: true in the JSON-RPC response, which triggers the usage
+    credit refund in the Next.js proxy.
+    """
+    pass
+
+
 # Constants
 META_GRAPH_API_VERSION = "v24.0"
 META_GRAPH_API_BASE = f"https://graph.facebook.com/{META_GRAPH_API_VERSION}"
@@ -376,8 +387,10 @@ def meta_api_tool(func):
                 return json.dumps(result, indent=2)
             
             return result
+        except McpToolError:
+            raise  # Let FastMCP set isError: true and refund the usage credit
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
             return json.dumps({"error": str(e)}, indent=2)
-    
+
     return wrapper 
