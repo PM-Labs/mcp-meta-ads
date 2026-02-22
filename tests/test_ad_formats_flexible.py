@@ -284,10 +284,9 @@ class TestFlexibleCreativeFullFlow:
             assert afs["call_to_action_types"] == ["SHOP_NOW"]
             assert afs["link_urls"] == [{"website_url": "https://example.com"}]
 
-            # object_story_spec still required
+            # object_story_spec needs only page_id; link URL is in asset_feed_spec.link_urls
             assert creative_data["object_story_spec"] == {
-                "page_id": "987654321",
-                "link_data": {"link": "https://example.com"}
+                "page_id": "987654321"
             }
 
     async def test_backward_compat_simple_creative_unaffected(self):

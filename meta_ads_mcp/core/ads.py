@@ -13,6 +13,143 @@ logger = logging.getLogger(__name__)
 
 from .api import meta_api_tool, make_api_request
 from .accounts import get_ad_accounts
+
+# ---------------------------------------------------------------------------
+# Placement asset customization helpers
+# ---------------------------------------------------------------------------
+
+# Maps our user-friendly placement group names to Meta API positions.
+# customization_spec in Meta's API is the placement SELECTOR (WHERE),
+# while image_label/video_label at the rule level is the asset REFERENCE (WHAT).
+_PLACEMENT_GROUP_TO_POSITIONS: Dict[str, Dict[str, List[str]]] = {
+    "FEED": {
+        "publisher_platforms": ["facebook", "instagram"],
+        "facebook_positions": ["feed"],
+        "instagram_positions": ["stream", "profile_feed"],
+    },
+    "STORY": {
+        "publisher_platforms": ["facebook", "instagram"],
+        "facebook_positions": ["story"],
+        "instagram_positions": ["story"],
+    },
+    "MESSENGER": {
+        "publisher_platforms": ["messenger"],
+    },
+    "INSTREAM_VIDEO": {
+        "publisher_platforms": ["facebook"],
+        "facebook_positions": ["instream_video"],
+    },
+    "SEARCH": {
+        "publisher_platforms": ["facebook"],
+        "facebook_positions": ["search"],
+    },
+    "SHOP": {
+        "publisher_platforms": ["instagram"],
+        "instagram_positions": ["shop"],
+    },
+    "AUDIENCE_NETWORK": {
+        "publisher_platforms": ["audience_network"],
+        "audience_network_positions": ["classic", "instream_video"],
+    },
+}
+
+
+def _translate_asset_customization_rules(
+    rules: List[Dict[str, Any]],
+    images_array: List[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Translate user-friendly placement_groups format to Meta API format.
+
+    Our user-facing format:
+        [{"placement_groups": ["FEED"], "customization_spec": {"image_hashes": ["h1"]}},
+         {"placement_groups": ["STORY"], "customization_spec": {"image_hashes": ["h2"]}}]
+
+    Meta API format:
+        [{"customization_spec": {"publisher_platforms": [...], "facebook_positions": [...]},
+          "image_label": {"name": "PBOARD_IMG_0"}},
+         ...]
+    And images in asset_feed_spec.images get adlabels assigned.
+
+    Rules that do NOT contain placement_groups are passed through unchanged
+    (allows raw Meta API format to be used directly).
+    """
+    if not rules or not any("placement_groups" in r for r in rules):
+        return rules, images_array
+
+    # Build hash → label mapping across all rules
+    hash_to_label: Dict[str, str] = {}
+    label_counter = 0
+
+    translated_rules = []
+    for rule in rules:
+        if "placement_groups" not in rule:
+            translated_rules.append(rule)
+            continue
+
+        placement_groups = rule.get("placement_groups", [])
+        cspec_input = rule.get("customization_spec", {})
+
+        # Build Meta-format customization_spec from placement_groups
+        publisher_platforms: set = set()
+        facebook_positions: set = set()
+        instagram_positions: set = set()
+        audience_network_positions: set = set()
+
+        for pg in placement_groups:
+            mapping = _PLACEMENT_GROUP_TO_POSITIONS.get(pg, {})
+            publisher_platforms.update(mapping.get("publisher_platforms", []))
+            facebook_positions.update(mapping.get("facebook_positions", []))
+            instagram_positions.update(mapping.get("instagram_positions", []))
+            audience_network_positions.update(mapping.get("audience_network_positions", []))
+
+        meta_cspec: Dict[str, Any] = {}
+        if publisher_platforms:
+            meta_cspec["publisher_platforms"] = sorted(publisher_platforms)
+        if facebook_positions:
+            meta_cspec["facebook_positions"] = sorted(facebook_positions)
+        if instagram_positions:
+            meta_cspec["instagram_positions"] = sorted(instagram_positions)
+        if audience_network_positions:
+            meta_cspec["audience_network_positions"] = sorted(audience_network_positions)
+
+        # Carry over text overrides (bodies, titles, etc.) into customization_spec
+        for text_field in ("bodies", "titles", "descriptions", "link_urls", "call_to_action_types"):
+            if text_field in cspec_input:
+                meta_cspec[text_field] = cspec_input[text_field]
+
+        translated_rule: Dict[str, Any] = {"customization_spec": meta_cspec}
+
+        # Assign label for image or video asset
+        img_hashes = cspec_input.get("image_hashes", [])
+        vid_ids = cspec_input.get("video_ids", [])
+        if img_hashes:
+            h = img_hashes[0]
+            if h not in hash_to_label:
+                hash_to_label[h] = f"PBOARD_IMG_{label_counter}"
+                label_counter += 1
+            translated_rule["image_label"] = {"name": hash_to_label[h]}
+        elif vid_ids:
+            v = vid_ids[0]
+            if v not in hash_to_label:
+                hash_to_label[v] = f"PBOARD_VID_{label_counter}"
+                label_counter += 1
+            translated_rule["video_label"] = {"name": hash_to_label[v]}
+
+        translated_rules.append(translated_rule)
+
+    # Add adlabels to images_array for referenced hashes
+    updated_images = []
+    for img in images_array:
+        img_hash = img.get("hash", "")
+        if img_hash in hash_to_label:
+            updated = dict(img)
+            updated["adlabels"] = [{"name": hash_to_label[img_hash]}]
+            updated_images.append(updated)
+        else:
+            updated_images.append(img)
+
+    return translated_rules, updated_images
 from .utils import download_image, try_multiple_download_methods, ad_creative_images, extract_creative_image_urls
 from .server import mcp_server
 
@@ -805,7 +942,8 @@ async def create_ad_creative(
     call_to_action_type: Optional[str] = None,
     lead_gen_form_id: Optional[str] = None,
     instagram_actor_id: Optional[str] = None,
-    ad_formats: Optional[List[str]] = None
+    ad_formats: Optional[List[str]] = None,
+    asset_customization_rules: Optional[List[Dict[str, Any]]] = None
 ) -> str:
     """
     Create a new ad creative using an uploaded image hash or video ID.
@@ -850,6 +988,25 @@ async def create_ad_creative(
                    When optimization_type is "DEGREES_OF_FREEDOM" with image_hashes, defaults to
                    ["AUTOMATIC_FORMAT"] (Flexible format). For video creatives, defaults to
                    ["SINGLE_VIDEO"]. Otherwise defaults to ["SINGLE_IMAGE"].
+        asset_customization_rules: List of placement-specific asset overrides for asset_feed_spec.
+                   Lets you assign different images or videos to specific placement groups
+                   (e.g., feed vs. stories). Only valid with image_hashes or plural asset params.
+                   Each rule uses a user-friendly format that is automatically translated to
+                   Meta's API format (adlabels + customization_spec positions):
+                     - placement_groups: list of placement group names
+                       Valid values: FEED, STORY, MESSENGER, INSTREAM_VIDEO, SEARCH, SHOP,
+                       AUDIENCE_NETWORK
+                     - customization_spec: dict specifying the asset to use for those placements
+                       Supported keys: image_hashes (list), video_ids (list),
+                       bodies, titles, descriptions (text overrides)
+                   All image hashes referenced in rules must also be in image_hashes.
+                   Example (feed gets one image, stories gets another):
+                   [
+                     {"placement_groups": ["FEED"],
+                      "customization_spec": {"image_hashes": ["<feed_hash>"]}},
+                     {"placement_groups": ["STORY"],
+                      "customization_spec": {"image_hashes": ["<story_hash>"]}}
+                   ]
 
     Returns:
         JSON response with created creative details
@@ -858,7 +1015,15 @@ async def create_ad_creative(
     if not account_id:
         return json.dumps({"error": "No account ID provided"}, indent=2)
 
-    # Defensive coercion: some MCP transports deliver array params as JSON strings
+    # Defensive coercion: some MCP transports deliver array/dict params as JSON strings
+    if isinstance(asset_customization_rules, str):
+        try:
+            _parsed = json.loads(asset_customization_rules)
+            if isinstance(_parsed, list):
+                asset_customization_rules = _parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     for _param_name, _param_val in [
         ('image_hashes', image_hashes),
         ('messages', messages),
@@ -1026,6 +1191,15 @@ async def create_ad_creative(
             else:
                 images_array = [{"hash": image_hash}]
 
+            # Translate placement_groups-style asset_customization_rules to Meta API format.
+            # Meta API uses customization_spec for placement selection (publisher_platforms,
+            # facebook_positions, instagram_positions) and image_label/video_label at the
+            # rule level for asset selection. Images also need adlabels assigned.
+            if asset_customization_rules and not is_video:
+                asset_customization_rules, images_array = _translate_asset_customization_rules(
+                    asset_customization_rules, images_array
+                )
+
             # Determine ad_formats: use explicit value if provided, otherwise smart default.
             if ad_formats:
                 resolved_ad_formats = ad_formats
@@ -1076,10 +1250,15 @@ async def create_ad_creative(
             if call_to_action_type:
                 asset_feed_spec["call_to_action_types"] = [call_to_action_type]
 
+            # Add placement-specific asset customization rules if provided
+            if asset_customization_rules:
+                asset_feed_spec["asset_customization_rules"] = asset_customization_rules
+
             creative_data["asset_feed_spec"] = asset_feed_spec
 
-            # For dynamic/FLEX creatives with asset_feed_spec, object_story_spec still
-            # needs page_id and a media anchor (Meta API requires this).
+            # For dynamic/FLEX creatives with asset_feed_spec, object_story_spec needs
+            # page_id. For non-video, the link URL is already in asset_feed_spec.link_urls
+            # so link_data is NOT added here (Meta rejects link_data without image_hash).
             if is_video:
                 # video_data does NOT support "link" directly — URL goes in
                 # call_to_action.value.link or is handled by asset_feed_spec.link_urls.
@@ -1092,10 +1271,7 @@ async def create_ad_creative(
                 }
             else:
                 creative_data["object_story_spec"] = {
-                    "page_id": page_id,
-                    "link_data": {
-                        "link": link_url
-                    }
+                    "page_id": page_id
                 }
         else:
             if is_video:
