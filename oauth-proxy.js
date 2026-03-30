@@ -43,6 +43,7 @@ function proxy(req, res, bodyBuf) {
     sessionId = mapped;
   }
   const headers = { ...req.headers, host: "localhost:" + BACKEND_PORT };
+  delete headers["authorization"];
   delete headers["content-length"];
   if (bodyBuf) headers["content-length"] = bodyBuf.length;
   const proxyReq = http.request(
