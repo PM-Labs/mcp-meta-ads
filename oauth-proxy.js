@@ -113,6 +113,26 @@ const server = http.createServer(async (req, res) => {
     if (cid !== OAUTH_CLIENT_ID || csec !== OAUTH_CLIENT_SECRET) return sendJson(res, 401, { error: "invalid_client" });
     return sendJson(res, 200, { access_token: AUTH_TOKEN, token_type: "Bearer", expires_in: 86400 });
   }
+  // Proxy Meta OAuth callback to Python callback server (port 8082)
+  const CALLBACK_PORT = parseInt(process.env.CALLBACK_PORT || "8082", 10);
+  if (path === "/callback" || path === "/token") {
+    const cHeaders = { ...req.headers, host: "localhost:" + CALLBACK_PORT };
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const bodyBuf = Buffer.concat(chunks);
+      delete cHeaders["content-length"];
+      if (bodyBuf.length) cHeaders["content-length"] = bodyBuf.length;
+      const cReq = http.request({ hostname: "127.0.0.1", port: CALLBACK_PORT, path: req.url, method: req.method, headers: cHeaders }, (cRes) => {
+        res.writeHead(cRes.statusCode, cRes.headers);
+        cRes.pipe(res);
+      });
+      cReq.on("error", (e) => { console.error("[CALLBACK] Error:", e.message); sendJson(res, 502, { error: "callback_unavailable" }); });
+      if (bodyBuf.length) cReq.write(bodyBuf);
+      cReq.end();
+    });
+    return;
+  }
   if (path === "/mcp" || path.startsWith("/mcp/")) {
     if (AUTH_TOKEN) {
       const ah = req.headers["authorization"];

@@ -26,7 +26,7 @@ from .pipeboard_auth import pipeboard_auth_manager
 # Scope includes pages_show_list and pages_read_engagement to fix issue #16
 # where get_account_pages failed for regular users due to missing page permissions
 AUTH_SCOPE = "business_management,public_profile,pages_show_list,pages_read_engagement"
-AUTH_REDIRECT_URI = "http://localhost:8888/callback"
+AUTH_REDIRECT_URI = os.environ.get("META_REDIRECT_URI", "http://localhost:8888/callback")
 AUTH_RESPONSE_TYPE = "token"
 
 # Log important configuration information
