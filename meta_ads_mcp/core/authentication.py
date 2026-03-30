@@ -162,7 +162,7 @@ async def get_login_link(access_token: Optional[str] = None) -> str:
             logger.info(f"Callback server started on port {port}")
             
             # Generate direct login URL
-            auth_manager.redirect_uri = f"http://localhost:{port}/callback"  # Ensure port is set correctly
+            auth_manager.redirect_uri = os.environ.get("META_REDIRECT_URI", f"http://localhost:{port}/callback")  # Ensure port is set correctly
             logger.info(f"Setting redirect URI to {auth_manager.redirect_uri}")
             login_url = auth_manager.get_auth_url()
             logger.info(f"Generated login URL: {login_url}")

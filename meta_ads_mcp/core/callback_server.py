@@ -245,7 +245,7 @@ def server_thread():
     global callback_server_running, callback_server_instance
     
     try:
-        callback_server_instance = HTTPServer(('localhost', callback_server_port), CallbackHandler)
+        callback_server_instance = HTTPServer(('0.0.0.0', callback_server_port), CallbackHandler)
         callback_server_running = True
         print(f"Callback server thread started on port {callback_server_port}")
         callback_server_instance.serve_forever()
