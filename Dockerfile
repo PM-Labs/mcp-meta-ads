@@ -1,25 +1,20 @@
 FROM python:3.11-slim
 
-# Install system dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc && \
+    apt-get install -y --no-install-recommends gcc curl && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
-
-# Install uv
-RUN pip install --upgrade pip && \
-    pip install uv
-
-# Copy requirements file
+RUN pip install --upgrade pip && pip install uv
 COPY requirements.txt .
-
-# Install dependencies using uv with --system flag
 RUN uv pip install --system -r requirements.txt
-
-# Copy the rest of the application
 COPY . .
 
-# Command to run the Meta Ads MCP server
-CMD ["python", "-m", "meta_ads_mcp"] 
+ENV PORT=8080
+ENV BACKEND_PORT=8081
+EXPOSE 8080
+
+RUN chmod +x start.sh
+CMD ["./start.sh"]
