@@ -109,6 +109,7 @@ async def create_adset(
     multi_advertiser_ads: Optional[int] = None,
     regional_regulated_categories: Optional[List[str]] = None,
     regional_regulation_identities: Optional[Dict[str, Any]] = None,
+    attribution_spec: Optional[List[Dict[str, Any]]] = None,
     access_token: Optional[str] = None
 ) -> str:
     """
@@ -385,6 +386,8 @@ async def create_adset(
 
     if regional_regulation_identities is not None:
         params["regional_regulation_identities"] = json.dumps(regional_regulation_identities)
+    if attribution_spec is not None:
+        params["attribution_spec"] = json.dumps(attribution_spec)
 
     try:
         data = await make_api_request(endpoint, access_token, params, method="POST")
@@ -437,6 +440,7 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
                         multi_advertiser_ads: Optional[int] = None,
                         regional_regulated_categories: Optional[List[str]] = None,
                         regional_regulation_identities: Optional[Dict[str, Any]] = None,
+                        attribution_spec: Optional[List[Dict[str, Any]]] = None,
                         access_token: Optional[str] = None) -> str:
     """
     Update an ad set with new settings including frequency caps and budgets.
@@ -588,6 +592,8 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
 
     if regional_regulation_identities is not None:
         params['regional_regulation_identities'] = json.dumps(regional_regulation_identities)
+    if attribution_spec is not None:
+        params["attribution_spec"] = json.dumps(attribution_spec)
 
     if not params:
         return json.dumps({"error": "No update parameters provided"}, indent=2)
