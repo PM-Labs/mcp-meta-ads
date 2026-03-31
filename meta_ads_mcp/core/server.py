@@ -344,6 +344,7 @@ def main():
         from . import ads_library, budget_schedules, reports, openai_deep_research
         from . import audiences, lookalikes, conversions, insights_advanced, rules, pixels
         from . import ab_testing, catalogs, lead_forms, reach_frequency, business
+        from . import page_posts, offline_conversions, creatives_advanced, saved_audiences, attribution
         
         # ✅ NEW: Setup HTTP authentication middleware
         logger.info("Setting up HTTP authentication middleware")
