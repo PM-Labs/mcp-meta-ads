@@ -629,16 +629,19 @@ async def get_ad_image(ad_id: str, access_token: Optional[str] = None) -> Image:
 
 @mcp_server.tool()
 @meta_api_tool
-async def get_ad_video(ad_id: str = "", video_id: str = "", access_token: Optional[str] = None) -> str:
+async def get_ad_video(ad_id: str = "", video_id: str = "", account_id: str = "", access_token: Optional[str] = None) -> str:
     """
     Get video details and source URL for a Meta ad video creative. Returns the video source URL
     (direct download link), thumbnail URL, and metadata (title, description, duration).
 
     Provide either ad_id (to auto-extract the video from the ad creative) or video_id directly.
+    Providing account_id is strongly recommended — it enables the advideos edge which works
+    with Business Manager tokens (avoids error 100/33 and error #10 on account-uploaded videos).
 
     Args:
         ad_id: Meta Ads ad ID (will extract video_id from the ad creative)
         video_id: Meta video ID (use this if you already have it from get_ad_creatives)
+        account_id: Ad account ID (e.g. "act_123" or "123"). Enables advideos edge lookup.
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     if not ad_id and not video_id:
@@ -674,12 +677,41 @@ async def get_ad_video(ad_id: str = "", video_id: str = "", access_token: Option
                 "hint": "This ad may be an image ad. Use get_ad_image instead."
             }, indent=2)
 
-    # Fetch video details including source URL
-    video_data = await make_api_request(
-        video_id,
-        access_token,
-        {"fields": "source,title,description,length,picture,thumbnails,created_time"}
-    )
+    video_fields = "source,title,description,length,picture,thumbnails,created_time"
+
+    # Strategy 1: Try fetching via the ad account's advideos edge.
+    # Direct GET /{video_id} fails for BM-shared tokens (error 100/33) and
+    # page-owned videos (error #10). The ad account edge works for any video
+    # that belongs to the account's video library.
+    # Normalize: strip act_ prefix if present (we add it back below)
+    if account_id and account_id.startswith("act_"):
+        account_id = account_id[4:]
+
+    if not account_id and ad_id:
+        ad_data = await make_api_request(ad_id, access_token, {"fields": "account_id"})
+        account_id = ad_data.get("account_id", "")
+
+    video_data = None
+    if account_id:
+        advideos_data = await make_api_request(
+            f"act_{account_id}/advideos",
+            access_token,
+            {
+                "fields": video_fields,
+                "filtering": json.dumps([{"field": "id", "operator": "IN", "value": [video_id]}]),
+            },
+        )
+        if "data" in advideos_data and advideos_data["data"]:
+            video_data = advideos_data["data"][0]
+            logger.debug(f"Video {video_id} resolved via ad account advideos edge")
+
+    # Strategy 2: Fall back to direct video node access.
+    if not video_data:
+        video_data = await make_api_request(
+            video_id,
+            access_token,
+            {"fields": video_fields}
+        )
 
     if "error" in video_data:
         return json.dumps({"error": f"Could not get video {video_id}", "details": video_data}, indent=2)
@@ -834,6 +866,7 @@ if ENABLE_SAVE_AD_IMAGE_LOCALLY:
 @meta_api_tool
 async def update_ad(
     ad_id: str,
+    name: Optional[str] = None,
     status: Optional[str] = None,
     bid_amount: Optional[int] = None,
     tracking_specs: Optional[List[Dict[str, Any]]] = None,
@@ -845,6 +878,7 @@ async def update_ad(
 
     Args:
         ad_id: Meta Ads ad ID
+        name: New ad name
         status: Update ad status (ACTIVE, PAUSED, etc.)
         bid_amount: Bid amount in account currency (in cents for USD)
         tracking_specs: Optional tracking specifications (e.g., for pixel events).
@@ -859,6 +893,8 @@ async def update_ad(
         creative_id = str(creative_id)
 
     params = {}
+    if name is not None:
+        params["name"] = name
     if status:
         params["status"] = status
     if bid_amount is not None:
@@ -871,7 +907,7 @@ async def update_ad(
         params["creative"] = json.dumps({"creative_id": creative_id})
 
     if not params:
-        return json.dumps({"error": "No update parameters provided (status, bid_amount, tracking_specs, or creative_id)"}, indent=2)
+        return json.dumps({"error": "No update parameters provided (name, status, bid_amount, tracking_specs, or creative_id)"}, indent=2)
 
     endpoint = f"{ad_id}"
     try:
@@ -1394,7 +1430,12 @@ async def create_ad_creative(
         # Determine whether to use asset_feed_spec path:
         # - plural parameters (headlines/descriptions/messages/image_hashes), OR
         # - optimization_type is set (FLEX creatives always use asset_feed_spec)
-        use_asset_feed = bool(headlines or descriptions or messages or image_hashes or optimization_type)
+        # - video_id + description: Meta's video_data rejects "description" directly,
+        #   so route through asset_feed_spec which supports descriptions for video ads
+        use_asset_feed = bool(
+            headlines or descriptions or messages or image_hashes or optimization_type
+            or (video_id and description)
+        )
 
         # Track if this is a video creative
         is_video = bool(video_id)
