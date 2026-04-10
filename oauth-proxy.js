@@ -9,8 +9,6 @@ const OAUTH_CLIENT_ID = (process.env.OAUTH_CLIENT_ID || "").trim();
 const OAUTH_CLIENT_SECRET = (process.env.OAUTH_CLIENT_SECRET || "").trim();
 
 const authCodes = {};
-const sessionMap = new Map();
-const SESSION_MAP_MAX = 100;
 
 function parseBody(req) {
   return new Promise((resolve) => {
@@ -34,14 +32,15 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
+// Transparent byte-pipe to the internal MCP server. No session state held
+// in this layer. If the backend returns 404 for an unknown session id we
+// propagate it as-is so the client can reinitialize cleanly per MCP spec.
+// Do NOT silently remap stale ids to new sessions — see
+// PM-Labs/mcp-playwright@1d75780 for root cause analysis.
 function proxy(req, res, bodyBuf) {
-  let sessionId = req.headers["mcp-session-id"];
-  if (sessionId && sessionMap.has(sessionId)) {
-    const mapped = sessionMap.get(sessionId);
-    req.headers["mcp-session-id"] = mapped;
-    console.log("[SESSION] Remapped stale " + sessionId + " -> " + mapped);
-    sessionId = mapped;
-  }
+  // Strip the public-facing Authorization (Bearer is consumed by this proxy,
+  // not the upstream MCP) and force the host header to localhost so upstream
+  // host checks accept the proxied request.
   const headers = { ...req.headers, host: "localhost:" + BACKEND_PORT };
   delete headers["authorization"];
   delete headers["content-length"];
@@ -49,16 +48,6 @@ function proxy(req, res, bodyBuf) {
   const proxyReq = http.request(
     { hostname: "127.0.0.1", port: BACKEND_PORT, path: req.url, method: req.method, headers },
     (proxyRes) => {
-      const newSid = proxyRes.headers["mcp-session-id"];
-      if (newSid && sessionId && newSid !== sessionId) {
-        if (sessionMap.size >= SESSION_MAP_MAX) { const o = sessionMap.keys().next().value; sessionMap.delete(o); }
-        sessionMap.set(sessionId, newSid);
-      }
-      if ((proxyRes.statusCode === 404 || proxyRes.statusCode === 400) && sessionId) {
-        delete req.headers["mcp-session-id"];
-        proxy(req, res, bodyBuf);
-        return;
-      }
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(res);
     }
