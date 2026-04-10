@@ -1134,6 +1134,217 @@ async def upload_ad_image(
 
 @mcp_server.tool()
 @meta_api_tool
+async def upload_video(
+    account_id: str,
+    access_token: Optional[str] = None,
+    video_url: Optional[str] = None,
+    file: Optional[str] = None,
+    name: Optional[str] = None,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+) -> str:
+    """
+    Upload a video to an ad account's video library for use in Meta Ads creatives.
+
+    Wraps POST /act_{account_id}/advideos. Returns the video_id, which can be
+    passed to create_ad_creative (video_id field) or embedded in object_story_spec.video_data.
+
+    Provide EITHER:
+        - video_url: a publicly reachable URL (Meta fetches it server-side via the
+          `file_url` param — simplest and works for any file size Meta can download)
+        - file: a data URL ("data:video/mp4;base64,AAAA...") or raw base64 string.
+          This is uploaded as multipart form-data via the `source` field.
+          Practical limit ~100MB due to base64 payload size — use video_url for larger files.
+
+    Args:
+        account_id: Meta Ads account ID (format: act_XXXXXXXXX or XXXXXXXXX)
+        access_token: Meta API access token (optional — will use cached token if not provided)
+        video_url: Public URL of the video file (preferred for large files)
+        file: Data URL or raw base64 string of the video (for direct upload)
+        name: Optional internal name for the video asset
+        title: Optional video title (shown in Ads Manager)
+        description: Optional video description
+
+    Returns:
+        JSON with success flag, video_id, and (when available) the raw Meta response.
+        On success the typical shape is:
+            { "success": true, "account_id": "act_...", "video_id": "<id>", "name": "..." }
+    """
+    # Validate inputs
+    if not account_id:
+        return json.dumps({"error": "No account ID provided"}, indent=2)
+
+    if not video_url and not file:
+        return json.dumps({
+            "error": "Provide either 'video_url' (public URL) or 'file' (data URL / base64)"
+        }, indent=2)
+
+    account_id = ensure_act_prefix(account_id)
+    endpoint = f"{account_id}/advideos"
+
+    try:
+        # --- Path 1: URL upload via make_api_request (Meta fetches server-side) ---
+        if video_url:
+            params: Dict[str, Any] = {"file_url": video_url}
+            if name:
+                params["name"] = name
+            if title:
+                params["title"] = title
+            if description:
+                params["description"] = description
+
+            logger.info(f"Uploading video to {account_id} via file_url")
+            data = await make_api_request(endpoint, access_token, params, method="POST")
+
+            if isinstance(data, dict) and "error" in data:
+                return json.dumps({
+                    "error": "Failed to upload video",
+                    "details": data.get("error"),
+                    "account_id": account_id,
+                    "video_url": video_url,
+                }, indent=2)
+
+            video_id = None
+            if isinstance(data, dict):
+                video_id = data.get("id") or data.get("video_id")
+
+            return json.dumps({
+                "success": True,
+                "account_id": account_id,
+                "video_id": video_id,
+                "name": name,
+                "title": title,
+                "raw_response": data,
+            }, indent=2)
+
+        # --- Path 2: direct base64 upload via multipart form-data ---
+        # The shared make_api_request helper does not support multipart, so we
+        # call httpx directly here. This mirrors upload_ad_image's base64 handling
+        # but posts the bytes to the `source` field instead of the `bytes` field.
+        import base64  # Local import
+        import hmac
+        import hashlib
+        import httpx
+        from .api import META_GRAPH_API_BASE, USER_AGENT
+
+        # Decode base64 payload
+        data_url_prefix = "data:"
+        base64_marker = "base64,"
+        inferred_ext = ".mp4"
+        inferred_name = name or ""
+
+        if file.startswith(data_url_prefix) and base64_marker in file:
+            header, base64_payload = file.split(base64_marker, 1)
+            base64_payload = base64_payload.strip()
+            mime_type = header[len(data_url_prefix):].split(";")[0].strip()
+            ext_map = {
+                "video/mp4": ".mp4",
+                "video/quicktime": ".mov",
+                "video/webm": ".webm",
+                "video/x-msvideo": ".avi",
+                "video/x-matroska": ".mkv",
+            }
+            inferred_ext = ext_map.get(mime_type, ".mp4")
+        else:
+            base64_payload = file.strip()
+
+        if not inferred_name:
+            inferred_name = f"upload{inferred_ext}"
+
+        try:
+            video_bytes = base64.b64decode(base64_payload)
+        except Exception as decode_error:
+            return json.dumps({
+                "error": "Failed to decode base64 video payload",
+                "details": str(decode_error),
+            }, indent=2)
+
+        if not access_token:
+            return json.dumps({
+                "error": {
+                    "message": "Authentication Required",
+                    "details": "A valid access token is required to upload video",
+                }
+            }, indent=2)
+
+        url = f"{META_GRAPH_API_BASE}/{endpoint}"
+
+        # Query-string params (access_token + appsecret_proof go on the URL
+        # so they don't get swallowed by multipart body encoding)
+        query_params: Dict[str, Any] = {"access_token": access_token}
+        app_secret = os.environ.get("META_APP_SECRET", "")
+        if app_secret:
+            query_params["appsecret_proof"] = hmac.new(
+                app_secret.encode("utf-8"),
+                access_token.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+
+        # Form fields that travel alongside the file in the multipart body
+        form_data: Dict[str, Any] = {}
+        if name:
+            form_data["name"] = name
+        if title:
+            form_data["title"] = title
+        if description:
+            form_data["description"] = description
+
+        files = {
+            "source": (inferred_name, video_bytes, "application/octet-stream"),
+        }
+
+        logger.info(
+            f"Uploading video to {account_id} via multipart "
+            f"({len(video_bytes)} bytes, name={inferred_name})"
+        )
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                params=query_params,
+                data=form_data,
+                files=files,
+                headers={"User-Agent": USER_AGENT},
+                timeout=300.0,  # Videos can take a while — allow 5 min
+            )
+
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            data = {"text_response": response.text, "status_code": response.status_code}
+
+        if response.status_code >= 400 or (isinstance(data, dict) and "error" in data):
+            return json.dumps({
+                "error": "Failed to upload video",
+                "status_code": response.status_code,
+                "details": data.get("error") if isinstance(data, dict) else data,
+                "account_id": account_id,
+                "name": inferred_name,
+            }, indent=2)
+
+        video_id = None
+        if isinstance(data, dict):
+            video_id = data.get("id") or data.get("video_id")
+
+        return json.dumps({
+            "success": True,
+            "account_id": account_id,
+            "video_id": video_id,
+            "name": inferred_name,
+            "title": title,
+            "bytes_uploaded": len(video_bytes),
+            "raw_response": data,
+        }, indent=2)
+
+    except Exception as e:
+        return json.dumps({
+            "error": "Failed to upload video",
+            "details": str(e),
+        }, indent=2)
+
+
+@mcp_server.tool()
+@meta_api_tool
 async def create_ad_creative(
     account_id: str,
     image_hash: Optional[str] = None,
