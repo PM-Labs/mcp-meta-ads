@@ -394,6 +394,7 @@ For advanced users who need to self-host, the package can be installed from sour
       - `bid_constraints`: Bid constraints dict. Required for LOWEST_COST_WITH_MIN_ROAS (e.g., `{"roas_average_floor": 20000}`)
       - `status`: Update ad set status (ACTIVE, PAUSED, etc.)
       - `targeting`: Targeting specifications including targeting_automation
+      - `is_incremental_attribution_enabled`: Toggle the ad set's "Attribution model" between Standard (`false`/unset) and Incremental (`true`). Maps to the Ads Manager UI dropdown shown alongside attribution settings. Independent of `attribution_spec` — `attribution_spec` controls the reporting window, this flag controls the optimization model. Editable on existing live ad sets.
       - `access_token` (optional): Meta API access token (will use cached token if not provided)
     - Returns: Confirmation with updated ad set details and a confirmation link
 
