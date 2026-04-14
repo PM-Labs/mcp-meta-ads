@@ -69,7 +69,7 @@ async def get_adset_details(adset_id: str, access_token: Optional[str] = None) -
     endpoint = f"{adset_id}"
     # Explicitly prioritize frequency_control_specs in the fields request
     params = {
-        "fields": "id,name,campaign_id,status,frequency_control_specs{event,interval_days,max_frequency},daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,bid_constraints,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining,dsa_beneficiary,dsa_payor,is_dynamic_creative,regional_regulated_categories,regional_regulation_identities"
+        "fields": "id,name,campaign_id,status,frequency_control_specs{event,interval_days,max_frequency},daily_budget,lifetime_budget,targeting,bid_amount,bid_strategy,bid_constraints,optimization_goal,billing_event,start_time,end_time,created_time,updated_time,attribution_spec,destination_type,promoted_object,pacing_type,budget_remaining,dsa_beneficiary,dsa_payor,is_dynamic_creative,is_incremental_attribution_enabled,regional_regulated_categories,regional_regulation_identities"
     }
     
     data = await make_api_request(endpoint, access_token, params)
@@ -490,6 +490,7 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
                         regional_regulated_categories: Optional[List[str]] = None,
                         regional_regulation_identities: Optional[Dict[str, Any]] = None,
                         attribution_spec: Optional[List[Dict[str, Any]]] = None,
+                        is_incremental_attribution_enabled: Optional[bool] = None,
                         access_token: Optional[str] = None) -> str:
     """
     Update an ad set with new settings including frequency caps and budgets.
@@ -541,6 +542,11 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
                          This parameter is kept for compatibility but will be rejected by Meta's API.
                          Valid event_type values: CLICK_THROUGH, VIEW_THROUGH.
                          Valid window_days values: 1, 7, 28 (depends on event_type and optimization_goal).
+        is_incremental_attribution_enabled: Toggle the ad set's "Attribution model" between
+                                            Standard (false/unset) and Incremental (true). Maps to the
+                                            Ads Manager UI dropdown shown alongside attribution_spec.
+                                            Independent of attribution_spec (which controls the reporting
+                                            window). Editable on live ad sets via POST /{adset-id}.
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     if not adset_id:
@@ -648,10 +654,10 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
     if regional_regulation_identities is not None:
         params['regional_regulation_identities'] = json.dumps(regional_regulation_identities)
     if attribution_spec is not None:
-        params["attribution_spec"] = json.dumps(attribution_spec)
-
-    if attribution_spec is not None:
         params['attribution_spec'] = json.dumps(attribution_spec)
+
+    if is_incremental_attribution_enabled is not None:
+        params['is_incremental_attribution_enabled'] = "true" if bool(is_incremental_attribution_enabled) else "false"
 
     if not params:
         return json.dumps({"error": "No update parameters provided"}, indent=2)
