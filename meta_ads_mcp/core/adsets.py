@@ -110,6 +110,7 @@ async def create_adset(
     regional_regulated_categories: Optional[List[str]] = None,
     regional_regulation_identities: Optional[Dict[str, Any]] = None,
     attribution_spec: Optional[List[Dict[str, Any]]] = None,
+    is_incremental_attribution_enabled: Optional[bool] = None,
     access_token: Optional[str] = None
 ) -> str:
     """
@@ -201,6 +202,15 @@ async def create_adset(
                          Example for 1-day click + 1-day view: [{"event_type": "CLICK_THROUGH", "window_days": 1}, {"event_type": "VIEW_THROUGH", "window_days": 1}]
                          Valid event_type values: CLICK_THROUGH, VIEW_THROUGH.
                          Valid window_days values: 1, 7, 28 (depends on event_type and optimization_goal).
+        is_incremental_attribution_enabled: Toggle the ad set's "Attribution model" between
+                                            Standard (false/unset) and Incremental (true). Maps to the
+                                            Ads Manager UI dropdown shown alongside attribution_spec.
+                                            CREATE-ONLY: Meta accepts this field at creation time only.
+                                            Attempts to change it on an existing ad set via update_adset
+                                            return HTTP 200 success but Meta silently drops the field —
+                                            same class as is_dynamic_creative. To change the attribution
+                                            model on an existing ad set, create a new ad set instead.
+                                            Verified 2026-04-15.
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     # Check required parameters
@@ -435,8 +445,8 @@ async def create_adset(
     if attribution_spec is not None:
         params["attribution_spec"] = json.dumps(attribution_spec)
 
-    if attribution_spec is not None:
-        params["attribution_spec"] = json.dumps(attribution_spec)
+    if is_incremental_attribution_enabled is not None:
+        params["is_incremental_attribution_enabled"] = "true" if bool(is_incremental_attribution_enabled) else "false"
 
     try:
         data = await make_api_request(endpoint, access_token, params, method="POST")
@@ -542,11 +552,16 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
                          This parameter is kept for compatibility but will be rejected by Meta's API.
                          Valid event_type values: CLICK_THROUGH, VIEW_THROUGH.
                          Valid window_days values: 1, 7, 28 (depends on event_type and optimization_goal).
-        is_incremental_attribution_enabled: Toggle the ad set's "Attribution model" between
-                                            Standard (false/unset) and Incremental (true). Maps to the
-                                            Ads Manager UI dropdown shown alongside attribution_spec.
-                                            Independent of attribution_spec (which controls the reporting
-                                            window). Editable on live ad sets via POST /{adset-id}.
+        is_incremental_attribution_enabled: The ad set's "Attribution model" (Standard vs Incremental).
+                                            WARNING: Meta's API accepts this field on POST /{adset-id}
+                                            and returns success, but SILENTLY DROPS the change — same
+                                            class as is_dynamic_creative. Verified 2026-04-15 by setting
+                                            both name and is_incremental_attribution_enabled in a single
+                                            update: name changed, flag did not. To change the attribution
+                                            model on an existing ad set, create a new ad set via
+                                            create_adset and pass is_incremental_attribution_enabled=true
+                                            at creation time. This parameter is kept for symmetry with
+                                            create_adset but will NOT actually flip a live ad set's model.
         access_token: Meta API access token (optional - will use cached token if not provided)
     """
     if not adset_id:
