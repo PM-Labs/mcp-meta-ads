@@ -546,12 +546,12 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
         regional_regulation_identities: Dict of verified identity IDs for regional transparency compliance.
                                         Required when regional_regulated_categories is set.
                                         Set individual keys to null to remove them.
-        attribution_spec: Attribution window specification for the ad set.
-                         WARNING: Meta no longer supports updating attribution_spec after ad set creation
-                         (error 1504040). To change attribution windows, create a new ad set instead.
-                         This parameter is kept for compatibility but will be rejected by Meta's API.
-                         Valid event_type values: CLICK_THROUGH, VIEW_THROUGH.
-                         Valid window_days values: 1, 7, 28 (depends on event_type and optimization_goal).
+        attribution_spec: NO-OP. Kept in the signature for backwards compatibility only.
+                         Meta does not allow updating attribution_spec after ad set creation
+                         (error 1504040). Any value passed here is silently dropped by this
+                         wrapper and never sent to Meta — previously it was passed through
+                         and guaranteed to fail. To change attribution windows, create a new
+                         ad set via create_adset instead.
         is_incremental_attribution_enabled: The ad set's "Attribution model" (Standard vs Incremental).
                                             WARNING: Meta's API accepts this field on POST /{adset-id}
                                             and returns success, but SILENTLY DROPS the change — same
@@ -668,8 +668,11 @@ async def update_adset(adset_id: str, frequency_control_specs: Optional[List[Dic
 
     if regional_regulation_identities is not None:
         params['regional_regulation_identities'] = json.dumps(regional_regulation_identities)
-    if attribution_spec is not None:
-        params['attribution_spec'] = json.dumps(attribution_spec)
+
+    # NOTE: attribution_spec is deliberately NOT forwarded to Meta here.
+    # Meta rejects updates to this field after ad set creation (error 1504040).
+    # The parameter remains in the signature for backwards compatibility but
+    # is now a documented no-op — see docstring.
 
     if is_incremental_attribution_enabled is not None:
         params['is_incremental_attribution_enabled'] = "true" if bool(is_incremental_attribution_enabled) else "false"
