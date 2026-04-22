@@ -101,17 +101,21 @@ async def make_api_request(
     endpoint: str,
     access_token: str,
     params: Optional[Dict[str, Any]] = None,
-    method: str = "GET"
+    method: str = "GET",
+    _auth_retried: bool = False,
 ) -> Dict[str, Any]:
     """
     Make a request to the Meta Graph API.
-    
+
     Args:
         endpoint: API endpoint path (without base URL)
         access_token: Meta API access token
         params: Additional query parameters
         method: HTTP method (GET, POST, DELETE)
-    
+        _auth_retried: Internal flag. Set to True by the retry path when we've
+            already invalidated a stale token and refreshed; prevents infinite
+            retries if auth is genuinely broken. Callers should not set this.
+
     Returns:
         API response as a dictionary
     """
@@ -228,6 +232,7 @@ async def make_api_request(
 
             # Check for rate limit errors vs authentication errors.
             # Code 4 is a rate limit (NOT auth) — do NOT invalidate token.
+            token_invalidated = False
             if "error" in error_info:
                 error_obj = error_info.get("error", {})
                 error_code = error_obj.get("code") if isinstance(error_obj, dict) else None
@@ -252,13 +257,42 @@ async def make_api_request(
                             }
                         }
                     auth_manager.invalidate_token()
+                    token_invalidated = True
                 elif e.response.status_code in [401, 403]:
                     logger.warning(f"Detected authentication error ({e.response.status_code})")
                     auth_manager.invalidate_token()
+                    token_invalidated = True
             elif e.response.status_code in [401, 403]:
                 logger.warning(f"Detected authentication error ({e.response.status_code})")
                 auth_manager.invalidate_token()
-            
+                token_invalidated = True
+
+            # If we just invalidated a stale token and haven't retried yet,
+            # fetch a fresh one and replay the request once. Without this,
+            # every caller that hits an expired token sees one failure before
+            # the self-heal kicks in on the next call.
+            if token_invalidated and not _auth_retried:
+                try:
+                    from meta_ads_mcp.core import auth  # local import to avoid cycles
+                    fresh_token = await auth.get_current_access_token()
+                except Exception as refresh_err:
+                    logger.warning(f"Token refresh after invalidate failed: {refresh_err}")
+                    fresh_token = None
+                if fresh_token and fresh_token != access_token:
+                    logger.info("Retrying request once with refreshed token after auth failure")
+                    # Strip the stale token from params so the retry rebuilds
+                    # access_token + appsecret_proof from the fresh token.
+                    retry_params = dict(params) if params else {}
+                    retry_params.pop("access_token", None)
+                    retry_params.pop("appsecret_proof", None)
+                    return await make_api_request(
+                        endpoint,
+                        fresh_token,
+                        retry_params,
+                        method,
+                        _auth_retried=True,
+                    )
+
             # Include full details for technical users
             full_response = {
                 "headers": dict(e.response.headers),
